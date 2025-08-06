@@ -1,7 +1,0 @@
-{
-  "api_key_env": "OPENROUTER_API_KEY",
-  "base_url": "https://openrouter.ai/api/v1",
-  "model": "openrouter/horizon-alpha",
-  "context_lines": 10,
-  "comment": "Configuration file for AI review hook. context_lines controls how much surrounding code context is included in git diff for better AI analysis."
-}
