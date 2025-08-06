@@ -1,0 +1,268 @@
+#!/usr/bin/env python3
+"""
+AI Review Hook - Main script for performing AI-assisted code reviews.
+
+This script integrates with pre-commit to provide AI-powered code reviews
+using the OpenAI API with configurable models and endpoints.
+"""
+
+import argparse
+import os
+import sys
+import subprocess
+from typing import List, Optional, Tuple
+import json
+
+try:
+    import openai
+except ImportError:
+    print("Error: openai package not found. Please install with: pip install openai")
+    sys.exit(1)
+
+
+class AIReviewer:
+    """Handles AI-powered code review using OpenAI API."""
+    
+    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-3.5-turbo"):
+        """
+        Initialize the AI reviewer.
+        
+        Args:
+            api_key: OpenAI API key
+            base_url: Custom API base URL (optional)
+            model: Model to use for review
+        """
+        self.model = model
+        self.client = openai.OpenAI(
+            api_key=api_key,
+            base_url=base_url
+        )
+    
+    def get_file_diff(self, filename: str, context_lines: int = 3) -> str:
+        """Get the git diff for a specific file with configurable context.
+        
+        Args:
+            filename: Path to the file
+            context_lines: Number of context lines to include around changes
+        """
+        try:
+            # Get staged changes for the file with custom context
+            result = subprocess.run(
+                ["git", "diff", "--cached", f"--unified={context_lines}", "--", filename],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return result.stdout
+        except subprocess.CalledProcessError:
+            # Fallback to unstaged changes if no staged changes
+            try:
+                result = subprocess.run(
+                    ["git", "diff", f"--unified={context_lines}", "--", filename],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                return result.stdout
+            except subprocess.CalledProcessError:
+                return ""
+    
+    def get_file_content(self, filename: str) -> str:
+        """Read the current content of a file."""
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                return f.read()
+        except (IOError, UnicodeDecodeError) as e:
+            return f"Error reading file: {e}"
+    
+    def create_review_prompt(self, filename: str, diff: str, content: str) -> str:
+        """Create the AI review prompt."""
+        return f"""Please perform a thorough code review of the following changes. 
+
+IMPORTANT: Start your response with "AI-REVIEW:[PASS]" if the code looks good and ready to commit, or "AI-REVIEW:[FAIL]" if there are issues that should be addressed before committing.
+
+File: {filename}
+
+Git Diff:
+```
+{diff}
+```
+
+Current File Content:
+```
+{content}
+```
+
+Please review for:
+1. Code quality and best practices
+2. Potential bugs or logical errors
+3. Security vulnerabilities
+4. Performance issues
+5. Code style and readability
+6. Documentation and comments
+7. Test coverage considerations
+
+Provide specific, actionable feedback with line numbers when possible. If you find no significant issues, explain why the code looks good.
+"""
+    
+    def review_file(self, filename: str, context_lines: int = 3) -> Tuple[bool, str]:
+        """
+        Review a single file using AI.
+        
+        Args:
+            filename: Path to the file to review
+            context_lines: Number of context lines to include in git diff
+        
+        Returns:
+            Tuple of (passed, review_message)
+        """
+        diff = self.get_file_diff(filename, context_lines)
+        if not diff.strip():
+            return True, f"No changes detected in {filename}"
+        
+        content = self.get_file_content(filename)
+        prompt = self.create_review_prompt(filename, diff, content)
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert code reviewer. Provide thorough, constructive feedback on code changes."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                max_tokens=2000,
+                temperature=0.1
+            )
+            
+            review_text = response.choices[0].message.content
+            
+            # Check if the review passed or failed
+            if review_text.startswith("AI-REVIEW:[PASS]"):
+                return True, review_text
+            elif review_text.startswith("AI-REVIEW:[FAIL]"):
+                return False, review_text
+            else:
+                # Default to fail if format is not followed
+                return False, f"AI-REVIEW:[FAIL] Invalid response format.\n\n{review_text}"
+                
+        except Exception as e:
+            return False, f"AI-REVIEW:[FAIL] Error during AI review: {str(e)}"
+
+
+def main():
+    """Main entry point for the AI review hook."""
+    parser = argparse.ArgumentParser(description="AI-assisted code review using OpenAI")
+    parser.add_argument(
+        "files",
+        nargs="*",
+        help="Files to review"
+    )
+    parser.add_argument(
+        "--api-key-env",
+        default="OPENAI_API_KEY",
+        help="Environment variable containing the OpenAI API key (default: OPENAI_API_KEY)"
+    )
+    parser.add_argument(
+        "--base-url",
+        help="Custom API base URL (e.g., for Azure OpenAI or other compatible APIs)"
+    )
+    parser.add_argument(
+        "--model",
+        default="gpt-3.5-turbo",
+        help="OpenAI model to use (default: gpt-3.5-turbo)"
+    )
+    parser.add_argument(
+        "--config-file",
+        help="Path to JSON configuration file"
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose output"
+    )
+    parser.add_argument(
+        "--context-lines",
+        type=int,
+        default=3,
+        help="Number of context lines to include in git diff (default: 3)"
+    )
+    
+    args = parser.parse_args()
+    
+    # Load configuration from file if provided
+    config = {}
+    if args.config_file and os.path.exists(args.config_file):
+        try:
+            with open(args.config_file, 'r') as f:
+                config = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Error loading config file: {e}", file=sys.stderr)
+            return 1
+    
+    # Override with command line arguments
+    api_key_env = config.get('api_key_env', args.api_key_env)
+    base_url = config.get('base_url') or args.base_url
+    model = config.get('model', args.model)
+    context_lines = config.get('context_lines', args.context_lines)
+    
+    # Get API key from environment
+    api_key = os.getenv(api_key_env)
+    if not api_key:
+        print(f"Error: API key not found in environment variable '{api_key_env}'", file=sys.stderr)
+        print(f"Please set the environment variable: export {api_key_env}=your_api_key", file=sys.stderr)
+        return 1
+    
+    if not args.files:
+        if args.verbose:
+            print("No files to review")
+        return 0
+    
+    # Initialize AI reviewer
+    try:
+        reviewer = AIReviewer(api_key=api_key, base_url=base_url, model=model)
+    except Exception as e:
+        print(f"Error initializing AI reviewer: {e}", file=sys.stderr)
+        return 1
+    
+    # Review each file
+    failed_files = []
+    all_reviews = []
+    
+    for filename in args.files:
+        if args.verbose:
+            print(f"Reviewing {filename}...")
+        
+        passed, review = reviewer.review_file(filename, context_lines)
+        all_reviews.append(f"\n{'='*60}\nFile: {filename}\n{'='*60}\n{review}")
+        
+        if not passed:
+            failed_files.append(filename)
+    
+    # Print all reviews
+    for review in all_reviews:
+        print(review)
+    
+    # Summary
+    if failed_files:
+        print(f"\n{'='*60}")
+        print(f"AI REVIEW FAILED for {len(failed_files)} file(s):")
+        for filename in failed_files:
+            print(f"  - {filename}")
+        print(f"{'='*60}")
+        return 1
+    else:
+        print(f"\n{'='*60}")
+        print(f"AI REVIEW PASSED for all {len(args.files)} file(s)")
+        print(f"{'='*60}")
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-review-hook"
+version = "0.1.0"
+description = "A pre-commit plugin for AI-assisted code review using OpenAI API"
+authors = [{name = "David Christensen", email = "randomparity@gmail.com"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "openai>=1.0.0",
+    "requests",
+    "argparse",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.scripts]
+ai-review = "ai_review_hook.main:main"
+
+[project.urls]
+Homepage = "https://github.com/randomparity/ai-review-hook"
+Repository = "https://github.com/randomparity/ai-review-hook"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ai_review_hook*"]

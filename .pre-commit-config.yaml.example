@@ -1,0 +1,34 @@
+# Example .pre-commit-config.yaml file
+repos:
+  # Use the AI review hook from this local repository
+  - repo: local
+    hooks:
+      - id: ai-review
+        name: AI Code Review
+        entry: ai-review
+        language: python
+        files: \.(py|js|ts|java|cpp|c|h|hpp|go|rs|rb|php|scala|kotlin|swift|cs|sh|yaml|yml|json|md)$
+        require_serial: true
+        pass_filenames: true
+        additional_dependencies: ['openai>=1.0.0', 'requests']
+        args: ['--model', 'gpt-4', '--verbose']
+
+  # Alternative: Use with a configuration file
+  # - repo: local
+  #   hooks:
+  #     - id: ai-review
+  #       name: AI Code Review
+  #       entry: ai-review
+  #       language: python
+  #       files: \.(py|js|ts|java|cpp|c|h|hpp|go|rs|rb|php|scala|kotlin|swift|cs|sh|yaml|yml|json|md)$
+  #       require_serial: true
+  #       pass_filenames: true
+  #       additional_dependencies: ['openai>=1.0.0', 'requests']
+  #       args: ['--config-file', 'ai-review-config.json']
+
+  # Alternative: Use as a remote repository (if published)
+  # - repo: https://github.com/yourusername/ai-review-hook
+  #   rev: v0.1.0
+  #   hooks:
+  #     - id: ai-review
+  #       args: ['--model', 'gpt-4']
