@@ -16,10 +16,16 @@ from typing import Tuple
 
 # Secret detection patterns
 SECRET_PATTERNS = [
-    re.compile(r'AKIA[0-9A-Z]{16}'),  # AWS Access Key ID
-    re.compile(r'(?i)aws_secret_access_key\s*=\s*[A-Za-z0-9/+=]{40}'),  # AWS Secret Access Key
-    re.compile(r'-----BEGIN (?:RSA|EC|DSA) PRIVATE KEY-----.*?-----END \\1 PRIVATE KEY-----', re.S),  # Private Keys
+    re.compile(r"AKIA[0-9A-Z]{16}"),  # AWS Access Key ID
+    re.compile(
+        r"(?i)aws_secret_access_key\s*=\s*[A-Za-z0-9/+=]{40}"
+    ),  # AWS Secret Access Key
+    re.compile(
+        r"-----BEGIN (?:RSA|EC|DSA) PRIVATE KEY-----.*?-----END \\1 PRIVATE KEY-----",
+        re.S,
+    ),  # Private Keys
 ]
+
 
 def redact(text: str) -> str:
     """Redact secrets from a string using predefined patterns."""
@@ -27,20 +33,29 @@ def redact(text: str) -> str:
         text = pattern.sub("[REDACTED]", text)
     return text
 
+
 try:
     import openai
 except ImportError:
-    logging.error("Error: openai package not found. Please install with: pip install openai")
+    logging.error(
+        "Error: openai package not found. Please install with: pip install openai"
+    )
     sys.exit(1)
 
 
 class AIReviewer:
     """Handles AI-powered code review using OpenAI API."""
-    
-    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", timeout: int = 30):
+
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str = None,
+        model: str = "gpt-4o-mini",
+        timeout: int = 30,
+    ):
         """
         Initialize the AI reviewer.
-        
+
         Args:
             api_key: OpenAI API key
             base_url: Custom API base URL (optional)
@@ -48,15 +63,11 @@ class AIReviewer:
             timeout: Timeout for API requests in seconds
         """
         self.model = model
-        self.client = openai.OpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            timeout=timeout
-        )
-    
+        self.client = openai.OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+
     def get_file_diff(self, filename: str, context_lines: int = 3) -> str:
         """Get the git diff for a specific file with configurable context.
-        
+
         Args:
             filename: Path to the file
             context_lines: Number of context lines to include around changes
@@ -64,11 +75,18 @@ class AIReviewer:
         try:
             # Get staged changes for the file with custom context
             result = subprocess.run(
-                ["git", "diff", "--cached", f"--unified={context_lines}", "--", filename],
+                [
+                    "git",
+                    "diff",
+                    "--cached",
+                    f"--unified={context_lines}",
+                    "--",
+                    filename,
+                ],
                 capture_output=True,
                 text=True,
                 check=True,
-                timeout=30
+                timeout=30,
             )
             return result.stdout
         except subprocess.CalledProcessError:
@@ -79,20 +97,20 @@ class AIReviewer:
                     capture_output=True,
                     text=True,
                     check=True,
-                    timeout=30
+                    timeout=30,
                 )
                 return result.stdout
             except subprocess.CalledProcessError:
                 return ""
-    
+
     def get_file_content(self, filename: str) -> str:
         """Read the current content of a file."""
         try:
-            with open(filename, 'r', encoding='utf-8') as f:
+            with open(filename, "r", encoding="utf-8") as f:
                 return f.read()
         except (IOError, UnicodeDecodeError) as e:
             return f"Error reading file: {e}"
-    
+
     def create_review_prompt(self, filename: str, diff: str, content: str) -> str:
         """Create the AI review prompt."""
         return f"""Please perform a thorough code review of the following changes.
@@ -122,22 +140,22 @@ Review the code for the following:
 
 Provide specific, actionable feedback with line numbers where possible. If no significant issues are found, briefly explain why the code is approved.
 """
-    
+
     def review_file(self, filename: str, context_lines: int = 3) -> Tuple[bool, str]:
         """
         Review a single file using AI.
-        
+
         Args:
             filename: Path to the file to review
             context_lines: Number of context lines to include in git diff
-        
+
         Returns:
             Tuple of (passed, review_message)
         """
         diff = self.get_file_diff(filename, context_lines)
         if not diff.strip():
             return True, f"No changes detected in {filename}"
-        
+
         content = self.get_file_content(filename)
 
         # Redact secrets before sending to the model
@@ -145,33 +163,32 @@ Provide specific, actionable feedback with line numbers where possible. If no si
         redacted_content = redact(content)
 
         prompt = self.create_review_prompt(filename, redacted_diff, redacted_content)
-        
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert code reviewer. Provide thorough, constructive feedback on code changes."
+                        "content": "You are an expert code reviewer. Provide thorough, constructive feedback on code changes.",
                     },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+                    {"role": "user", "content": prompt},
                 ],
                 max_tokens=2000,
-                temperature=0.1
+                temperature=0.1,
             )
-            
+
             review_text = response.choices[0].message.content
 
             # Fail-closed: FAIL takes precedence. Check the first line for a definitive marker.
-            match = re.match(r'^AI-REVIEW:\\[(PASS|FAIL)\\]', review_text.strip(), re.IGNORECASE)
+            match = re.match(
+                r"^AI-REVIEW:\\[(PASS|FAIL)\\]", review_text.strip(), re.IGNORECASE
+            )
             if match:
                 result = match.group(1).upper()
-                if result == 'FAIL':
+                if result == "FAIL":
                     return False, review_text
-                elif result == 'PASS':
+                elif result == "PASS":
                     return True, review_text
 
             # Fallback for markers anywhere in the text, prioritizing FAIL
@@ -184,62 +201,53 @@ Provide specific, actionable feedback with line numbers where possible. If no si
             return False, f"AI-REVIEW[MISSING]\n\n{review_text}"
 
         except openai.APIError as e:
-            return False, f"AI-REVIEW:[FAIL] OpenAI API Error: {e.status_code} - {e.message}"
+            return (
+                False,
+                f"AI-REVIEW:[FAIL] OpenAI API Error: {e.status_code} - {e.message}",
+            )
 
 
 def main() -> int:
     """Main entry point for the AI review hook."""
     parser = argparse.ArgumentParser(description="AI-assisted code review using OpenAI")
-    parser.add_argument(
-        "files",
-        nargs="*",
-        help="Files to review"
-    )
+    parser.add_argument("files", nargs="*", help="Files to review")
     parser.add_argument(
         "--api-key-env",
         default="OPENAI_API_KEY",
-        help="Environment variable containing the OpenAI API key (default: OPENAI_API_KEY)"
+        help="Environment variable containing the OpenAI API key (default: OPENAI_API_KEY)",
     )
     parser.add_argument(
         "--base-url",
-        help="Custom API base URL (e.g., for Azure OpenAI or other compatible APIs)"
+        help="Custom API base URL (e.g., for Azure OpenAI or other compatible APIs)",
     )
     parser.add_argument(
         "--model",
         default="gpt-3.5-turbo",
-        help="OpenAI model to use (default: gpt-4o-mini)"
+        help="OpenAI model to use (default: gpt-4o-mini)",
     )
     parser.add_argument(
-        "--timeout", type=int,
-        default=30,
-        help="API request timeout in seconds"
+        "--timeout", type=int, default=30, help="API request timeout in seconds"
     )
     parser.add_argument(
-        "--max-diff-bytes", type=int,
-        default=10000,
-        help="Maximum diff size to send"
+        "--max-diff-bytes", type=int, default=10000, help="Maximum diff size to send"
     )
     parser.add_argument(
-        "--max-content-bytes", type=int,
+        "--max-content-bytes",
+        type=int,
         default=0,
-        help="Maximum file content size to send (0 for no limit)"
+        help="Maximum file content size to send (0 for no limit)",
     )
     parser.add_argument(
-        "--diff-only",
-        action="store_true",
-        help="Only send the diff to the model")
+        "--diff-only", action="store_true", help="Only send the diff to the model"
     )
     parser.add_argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Enable verbose output"
+        "--verbose", "-v", action="store_true", help="Enable verbose output"
     )
     parser.add_argument(
         "--context-lines",
         type=int,
         default=3,
-        help="Number of context lines to include in git diff (default: 3)"
+        help="Number of context lines to include in git diff (default: 3)",
     )
     parser.add_argument(
         "--output-file",
@@ -248,13 +256,21 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING, format='%(levelname)s: %(message)s')
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(levelname)s: %(message)s",
+    )
 
     if args.base_url and not args.base_url.startswith("https://api.openai.com"):
-        logging.warning(f"Using a custom base URL: {args.base_url}. Ensure it is trusted.")
+        logging.warning(
+            f"Using a custom base URL: {args.base_url}. Ensure it is trusted."
+        )
+    api_key = os.getenv(args.api_key_env)
     if not api_key:
         logging.error(f"API key not found in environment variable '{args.api_key_env}'")
-        logging.error(f"Please set the environment variable: export {args.api_key_env}=your_api_key")
+        logging.error(
+            f"Please set the environment variable: export {args.api_key_env}=your_api_key"
+        )
         return 1
 
     if not args.files:
@@ -263,7 +279,12 @@ def main() -> int:
 
     # Initialize AI reviewer
     try:
-        reviewer = AIReviewer(api_key=api_key, base_url=args.base_url, model=args.model, timeout=args.timeout)
+        reviewer = AIReviewer(
+            api_key=api_key,
+            base_url=args.base_url,
+            model=args.model,
+            timeout=args.timeout,
+        )
     except Exception as e:
         logging.error(f"Error initializing AI reviewer: {e}")
         return 1
@@ -294,7 +315,7 @@ def main() -> int:
             output_content = "\n".join(all_reviews)
             with open(output_file, "w", encoding="utf-8") as f:
                 # Strip leading newline from the first entry for a clean file start
-                f.write(output_content.lstrip('\n'))
+                f.write(output_content.lstrip("\n"))
             logging.info(f"\nFull review log saved to {output_file}")
         except IOError as e:
             logging.error(f"\nError writing to output file: {e}")
