@@ -80,9 +80,9 @@ def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini
     
     def create_review_prompt(self, filename: str, diff: str, content: str) -> str:
         """Create the AI review prompt."""
-        return f"""Please perform a thorough code review of the following changes. 
+        return f"""Please perform a thorough code review of the following changes.
 
-IMPORTANT: Start your response with "AI-REVIEW:[PASS]" if the code looks good and ready to commit, or "AI-REVIEW:[FAIL]" if there are issues that should be addressed before committing.
+IMPORTANT: Your first line of response must be either `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.
 
 File: {filename}
 
@@ -96,16 +96,16 @@ Current File Content:
 {content}
 ```
 
-Please review for:
-1. Code quality and best practices
-2. Potential bugs or logical errors
-3. Security vulnerabilities
-4. Performance issues
-5. Code style and readability
-6. Documentation and comments
-7. Test coverage considerations
+Review the code for the following:
+1.  **Code Quality & Best Practices**: Adherence to coding standards, clarity, and maintainability.
+2.  **Potential Bugs & Logical Errors**: Flaws that could lead to incorrect behavior.
+3.  **Security Vulnerabilities**: Weaknesses that could be exploited.
+4.  **Performance Issues**: Inefficiencies in code that could impact speed or resource usage.
+5.  **Code Style & Readability**: Consistency with project style and overall readability.
+6.  **Documentation & Comments**: Clarity and usefulness of documentation and comments.
+7.  **Test Coverage**: Adequacy of tests for the changes.
 
-Provide specific, actionable feedback with line numbers when possible. If you find no significant issues, explain why the code looks good.
+Provide specific, actionable feedback with line numbers where possible. If no significant issues are found, briefly explain why the code is approved.
 """
     
     def review_file(self, filename: str, context_lines: int = 3) -> Tuple[bool, str]:
@@ -145,18 +145,26 @@ Provide specific, actionable feedback with line numbers when possible. If you fi
             
             review_text = response.choices[0].message.content
 
-            # The AI can be inconsistent. Prioritize PASS if present, otherwise look for FAIL.
-            # This handles cases where both might appear or have extra markdown.
-            if re.search("AI-REVIEW:\[PASS\]", review_text):
-                return True, review_text
-            elif re.search("AI-REVIEW:\[FAIL\]", review_text):
+            # Fail-closed: FAIL takes precedence. Check the first line for a definitive marker.
+            match = re.match(r'^AI-REVIEW:\\[(PASS|FAIL)\\]', review_text.strip(), re.IGNORECASE)
+            if match:
+                result = match.group(1).upper()
+                if result == 'FAIL':
+                    return False, review_text
+                elif result == 'PASS':
+                    return True, review_text
+
+            # Fallback for markers anywhere in the text, prioritizing FAIL
+            if re.search("AI-REVIEW:\\[FAIL\\]", review_text, re.IGNORECASE):
                 return False, review_text
-            else:
-                # If neither marker is found, prepend the MISSING marker and fail the check.
-                return False, f"AI-REVIEW[MISSING]\n\n{review_text}"
-                
-        except Exception as e:
-            return False, f"AI-REVIEW:[FAIL] Error during AI review: {str(e)}"
+            if re.search("AI-REVIEW:\\[PASS\\]", review_text, re.IGNORECASE):
+                return True, review_text
+
+            # If neither marker is found, fail the check.
+            return False, f"AI-REVIEW[MISSING]\n\n{review_text}"
+
+        except openai.APIError as e:
+            return False, f"AI-REVIEW:[FAIL] OpenAI API Error: {e.status_code} - {e.message}"
 
 
 def main() -> int:
