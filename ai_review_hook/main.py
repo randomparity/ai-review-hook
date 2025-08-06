@@ -37,7 +37,7 @@ except ImportError:
 class AIReviewer:
     """Handles AI-powered code review using OpenAI API."""
     
-def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", timeout: int = 30):
+    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", timeout: int = 30):
         """
         Initialize the AI reviewer.
         
