@@ -189,6 +189,10 @@ def main():
         default=3,
         help="Number of context lines to include in git diff (default: 3)"
     )
+    parser.add_argument(
+        "--output-file",
+        help="File to save the complete review output.",
+    )
 
     args = parser.parse_args()
 
@@ -229,17 +233,36 @@ def main():
     for review in all_reviews:
         print(review)
 
+    # Save review to file if requested
+    output_file = args.output_file
+    if output_file:
+        try:
+            # Join with newlines for a readable file format
+            output_content = "\n".join(all_reviews)
+            with open(output_file, "w", encoding="utf-8") as f:
+                # Strip leading newline from the first entry for a clean file start
+                f.write(output_content.lstrip('\n'))
+            if args.verbose:
+                print(f"\nFull review log saved to {output_file}")
+        except IOError as e:
+            print(f"\nError writing to output file: {e}", file=sys.stderr)
+            output_file = None  # Clear on failure
+
     # Summary
     if failed_files:
         print(f"\n{'='*60}")
         print(f"AI REVIEW FAILED for {len(failed_files)} file(s):")
         for filename in failed_files:
             print(f"  - {filename}")
+        if output_file:
+            print(f"Review details saved to: {output_file}")
         print(f"{'='*60}")
         return 1
     else:
         print(f"\n{'='*60}")
         print(f"AI REVIEW PASSED for all {len(args.files)} file(s)")
+        if output_file:
+            print(f"Review details saved to: {output_file}")
         print(f"{'='*60}")
         return 0
 

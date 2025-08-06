@@ -37,7 +37,8 @@ repos:
             '--context-lines', '5',
             # Uncomment the following lines to customize the API URL and key
             # '--base-url', 'https://api.example.com/v1',
-            # '--api-key-env', 'MY_CUSTOM_API_KEY'
+            # '--api-key-env', 'MY_CUSTOM_API_KEY',
+            # '--output-file', 'ai-review.log'
             ]
 ```
 
@@ -73,6 +74,7 @@ repos:
             # Uncomment the following lines to customize the API URL and key
             # '--base-url', 'https://api.example.com/v1',
             # '--api-key-env', 'MY_CUSTOM_API_KEY'
+            # '--output-file', 'ai-review.log'
             ]
 ```
 
@@ -112,6 +114,11 @@ ai-review file.py --base-url https://your-endpoint.openai.azure.com/
 ```bash
 export MY_API_KEY="your_key"
 ai-review file.py --api-key-env MY_API_KEY
+```
+
+### Save Review Output to a File
+```bash
+ai-review file.py --output-file review_output.txt
 ```
 
 
