@@ -33,7 +33,10 @@ repos:
         args: [
             '--model', 'gpt-4', 
             '--verbose', 
-            '--context-lines', '5'
+            '--context-lines', '5',
+            # Uncomment the following lines to customize the API URL and key
+            # '--base-url', 'https://api.example.com/v1',
+            # '--api-key-env', 'MY_CUSTOM_API_KEY'
             ]
 ```
 
@@ -64,7 +67,10 @@ repos:
         args: [
             '--model', 'gpt-4', 
             '--verbose',
-            '--context-lines', '10'
+            '--context-lines', '10',
+            # Uncomment the following lines to customize the API URL and key
+            # '--base-url', 'https://api.example.com/v1',
+            # '--api-key-env', 'MY_CUSTOM_API_KEY'
             ]
 ```
 
