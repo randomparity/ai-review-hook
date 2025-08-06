@@ -10,14 +10,14 @@ import argparse
 import os
 import sys
 import subprocess
-from typing import List, Optional, Tuple
-import json
 import re
+import logging
+from typing import Tuple
 
 try:
     import openai
 except ImportError:
-    print("Error: openai package not found. Please install with: pip install openai")
+    logging.error("Error: openai package not found. Please install with: pip install openai")
     sys.exit(1)
 
 
@@ -157,7 +157,7 @@ Provide specific, actionable feedback with line numbers when possible. If you fi
             return False, f"AI-REVIEW:[FAIL] Error during AI review: {str(e)}"
 
 
-def main():
+def main() -> int:
     """Main entry point for the AI review hook."""
     parser = argparse.ArgumentParser(description="AI-assisted code review using OpenAI")
     parser.add_argument(
@@ -198,23 +198,23 @@ def main():
 
     args = parser.parse_args()
 
-    # Get API key from environment
+    logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING, format='%(levelname)s: %(message)s')
+
     api_key = os.getenv(args.api_key_env)
     if not api_key:
-        print(f"Error: API key not found in environment variable '{args.api_key_env}'", file=sys.stderr)
-        print(f"Please set the environment variable: export {args.api_key_env}=your_api_key", file=sys.stderr)
+        logging.error(f"API key not found in environment variable '{args.api_key_env}'")
+        logging.error(f"Please set the environment variable: export {args.api_key_env}=your_api_key")
         return 1
 
     if not args.files:
-        if args.verbose:
-            print("No files to review")
+        logging.info("No files to review")
         return 0
 
     # Initialize AI reviewer
     try:
         reviewer = AIReviewer(api_key=api_key, base_url=args.base_url, model=args.model)
     except Exception as e:
-        print(f"Error initializing AI reviewer: {e}", file=sys.stderr)
+        logging.error(f"Error initializing AI reviewer: {e}")
         return 1
 
     # Review each file
@@ -222,8 +222,7 @@ def main():
     all_reviews = []
 
     for filename in args.files:
-        if args.verbose:
-            print(f"Reviewing {filename}...")
+        logging.info(f"Reviewing {filename}...")
 
         passed, review = reviewer.review_file(filename, args.context_lines)
         all_reviews.append(f"\n{'='*60}\nFile: {filename}\\n{'='*60}\\n{review}")
@@ -231,7 +230,6 @@ def main():
         if not passed:
             failed_files.append(filename)
 
-    # Print all reviews
     for review in all_reviews:
         print(review)
 
@@ -244,28 +242,27 @@ def main():
             with open(output_file, "w", encoding="utf-8") as f:
                 # Strip leading newline from the first entry for a clean file start
                 f.write(output_content.lstrip('\n'))
-            if args.verbose:
-                print(f"\nFull review log saved to {output_file}")
+            logging.info(f"\nFull review log saved to {output_file}")
         except IOError as e:
-            print(f"\nError writing to output file: {e}", file=sys.stderr)
+            logging.error(f"\nError writing to output file: {e}")
             output_file = None  # Clear on failure
 
     # Summary
     if failed_files:
-        print(f"\n{'='*60}")
-        print(f"AI REVIEW FAILED for {len(failed_files)} file(s):")
+        logging.warning(f"\n{'='*60}")
+        logging.warning(f"AI REVIEW FAILED for {len(failed_files)} file(s):")
         for filename in failed_files:
-            print(f"  - {filename}")
+            logging.warning(f"  - {filename}")
         if output_file:
-            print(f"Review details saved to: {output_file}")
-        print(f"{'='*60}")
+            logging.warning(f"Review details saved to: {output_file}")
+        logging.warning(f"{'='*60}")
         return 1
     else:
-        print(f"\n{'='*60}")
-        print(f"AI REVIEW PASSED for all {len(args.files)} file(s)")
+        logging.info(f"\n{'='*60}")
+        logging.info(f"AI REVIEW PASSED for all {len(args.files)} file(s)")
         if output_file:
-            print(f"Review details saved to: {output_file}")
-        print(f"{'='*60}")
+            logging.info(f"Review details saved to: {output_file}")
+        logging.info(f"{'='*60}")
         return 0
 
 
