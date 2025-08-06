@@ -44,6 +44,20 @@ pre-commit run ai-review --all-files
 - `--context-lines`: Number of context lines in git diff (default: 3)
 - `--verbose, -v`: Enable verbose output
 
-## License
+## Development Setup
+
+To contribute to this project, first clone the repository and then install the necessary dependencies for local development:
+
+```sh
+pip install -r requirements-dev.txt
+```
+
+Next, install the pre-commit hooks to ensure your contributions adhere to the project's linting and formatting standards:
+
+```sh
+pre-commit install
+```
+
+Now, every time you commit your changes, the pre-commit hooks will automatically run, checking for any issues. If any are found, the commit will be aborted, allowing you to fix the issues before committing again.
 
 MIT License
