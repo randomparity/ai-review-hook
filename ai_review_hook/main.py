@@ -257,6 +257,8 @@ def main() -> int:
     for filename in args.files:
         logging.info(f"Reviewing {filename}...")
 
+        # This is a synchronous operation. For a large number of files, consider
+        # parallelizing this process using concurrent.futures or similar libraries.
         passed, review = reviewer.review_file(filename, args.context_lines)
         all_reviews.append(f"\n{'='*60}\nFile: {filename}\\n{'='*60}\\n{review}")
 
