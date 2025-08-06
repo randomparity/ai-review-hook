@@ -129,9 +129,10 @@ ai-review file.py --output-file review_output.txt
 
 ## AI Review Response Format
 
-The AI will respond with one of:
-- `AI-REVIEW:[PASS]` - Code is ready to commit
-- `AI-REVIEW:[FAIL]` - Issues found that should be addressed
+The hook will report one of the following statuses:
+- `AI-REVIEW:[PASS]` - The AI review passed and the code is ready to commit.
+- `AI-REVIEW:[FAIL]` - The AI review found issues that should be addressed before committing.
+- `AI-REVIEW[MISSING]` - The AI response was not in the expected format and could not be parsed. The hook will fail, but the original AI output will still be available in the log file for inspection.
 
 ## Examples
 
@@ -156,6 +157,28 @@ git commit -m "Your commit message"
 
 # If AI review fails, fix issues and try again
 ```
+
+## Bypassing the Review
+
+If you need to commit without running the AI review, you can use standard `pre-commit` bypass methods.
+
+### One-Time Bypass (Not Recommended)
+
+To bypass all pre-commit hooks for a single commit, use the `--no-verify` flag. This should be used sparingly, as it skips all checks, including linters and formatters.
+
+```bash
+git commit -m "Your commit message" --no-verify
+```
+
+### Skipping a Specific Hook
+
+A safer way to bypass only the AI review is to use the `SKIP` environment variable.
+
+```bash
+SKIP=ai-review git commit -m "Your commit message"
+```
+
+This will run all other hooks defined in your configuration.
 
 ## Troubleshooting
 

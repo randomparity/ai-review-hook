@@ -12,6 +12,7 @@ import sys
 import subprocess
 from typing import List, Optional, Tuple
 import json
+import re
 
 try:
     import openai
@@ -141,15 +142,16 @@ Provide specific, actionable feedback with line numbers when possible. If you fi
             )
             
             review_text = response.choices[0].message.content
-            
-            # Check if the review passed or failed
-            if review_text.startswith("AI-REVIEW:[PASS]"):
+
+            # The AI can be inconsistent. Prioritize PASS if present, otherwise look for FAIL.
+            # This handles cases where both might appear or have extra markdown.
+            if re.search("AI-REVIEW:\[PASS\]", review_text):
                 return True, review_text
-            elif review_text.startswith("AI-REVIEW:[FAIL]"):
+            elif re.search("AI-REVIEW:\[FAIL\]", review_text):
                 return False, review_text
             else:
-                # Default to fail if format is not followed
-                return False, f"AI-REVIEW:[FAIL] Invalid response format.\n\n{review_text}"
+                # If neither marker is found, prepend the MISSING marker and fail the check.
+                return False, f"AI-REVIEW[MISSING]\n\n{review_text}"
                 
         except Exception as e:
             return False, f"AI-REVIEW:[FAIL] Error during AI review: {str(e)}"
