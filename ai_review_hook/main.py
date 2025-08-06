@@ -24,7 +24,7 @@ except ImportError:
 class AIReviewer:
     """Handles AI-powered code review using OpenAI API."""
     
-    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-3.5-turbo"):
+def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini", timeout: int = 30):
         """
         Initialize the AI reviewer.
         
@@ -32,11 +32,13 @@ class AIReviewer:
             api_key: OpenAI API key
             base_url: Custom API base URL (optional)
             model: Model to use for review
+            timeout: Timeout for API requests in seconds
         """
         self.model = model
         self.client = openai.OpenAI(
             api_key=api_key,
-            base_url=base_url
+            base_url=base_url,
+            timeout=timeout
         )
     
     def get_file_diff(self, filename: str, context_lines: int = 3) -> str:
@@ -177,7 +179,27 @@ def main() -> int:
     parser.add_argument(
         "--model",
         default="gpt-3.5-turbo",
-        help="OpenAI model to use (default: gpt-3.5-turbo)"
+        help="OpenAI model to use (default: gpt-4o-mini)"
+    )
+    parser.add_argument(
+        "--timeout", type=int,
+        default=30,
+        help="API request timeout in seconds"
+    )
+    parser.add_argument(
+        "--max-diff-bytes", type=int,
+        default=10000,
+        help="Maximum diff size to send"
+    )
+    parser.add_argument(
+        "--max-content-bytes", type=int,
+        default=0,
+        help="Maximum file content size to send (0 for no limit)"
+    )
+    parser.add_argument(
+        "--diff-only",
+        action="store_true",
+        help="Only send the diff to the model")
     )
     parser.add_argument(
         "--verbose",
@@ -212,7 +234,7 @@ def main() -> int:
 
     # Initialize AI reviewer
     try:
-        reviewer = AIReviewer(api_key=api_key, base_url=args.base_url, model=args.model)
+        reviewer = AIReviewer(api_key=api_key, base_url=args.base_url, model=args.model, timeout=args.timeout)
     except Exception as e:
         logging.error(f"Error initializing AI reviewer: {e}")
         return 1
