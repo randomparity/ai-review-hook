@@ -30,6 +30,7 @@ repos:
     hooks:
     -   id: ai-review
         name: AI Code Review
+        additional_dependencies: ['openai>=1.0.0', 'requests']
         args: [
             '--model', 'gpt-4', 
             '--verbose', 
@@ -64,6 +65,7 @@ repos:
     -   id: ai-review-push
         name: AI Code Review (pre-push)
         stages: [pre-push]
+        additional_dependencies: ['openai>=1.0.0', 'requests']
         args: [
             '--model', 'gpt-4', 
             '--verbose',
