@@ -14,6 +14,19 @@ import re
 import logging
 from typing import Tuple
 
+# Secret detection patterns
+SECRET_PATTERNS = [
+    re.compile(r'AKIA[0-9A-Z]{16}'),  # AWS Access Key ID
+    re.compile(r'(?i)aws_secret_access_key\s*=\s*[A-Za-z0-9/+=]{40}'),  # AWS Secret Access Key
+    re.compile(r'-----BEGIN (?:RSA|EC|DSA) PRIVATE KEY-----.*?-----END \\1 PRIVATE KEY-----', re.S),  # Private Keys
+]
+
+def redact(text: str) -> str:
+    """Redact secrets from a string using predefined patterns."""
+    for pattern in SECRET_PATTERNS:
+        text = pattern.sub("[REDACTED]", text)
+    return text
+
 try:
     import openai
 except ImportError:
@@ -126,7 +139,12 @@ Provide specific, actionable feedback with line numbers where possible. If no si
             return True, f"No changes detected in {filename}"
         
         content = self.get_file_content(filename)
-        prompt = self.create_review_prompt(filename, diff, content)
+
+        # Redact secrets before sending to the model
+        redacted_diff = redact(diff)
+        redacted_content = redact(content)
+
+        prompt = self.create_review_prompt(filename, redacted_diff, redacted_content)
         
         try:
             response = self.client.chat.completions.create(
