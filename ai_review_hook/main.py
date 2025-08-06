@@ -54,7 +54,8 @@ def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini
                 ["git", "diff", "--cached", f"--unified={context_lines}", "--", filename],
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
+                timeout=30
             )
             return result.stdout
         except subprocess.CalledProcessError:
@@ -64,7 +65,8 @@ def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o-mini
                     ["git", "diff", f"--unified={context_lines}", "--", filename],
                     capture_output=True,
                     text=True,
-                    check=True
+                    check=True,
+                    timeout=30
                 )
                 return result.stdout
             except subprocess.CalledProcessError:
@@ -230,7 +232,8 @@ def main() -> int:
 
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING, format='%(levelname)s: %(message)s')
 
-    api_key = os.getenv(args.api_key_env)
+    if args.base_url and not args.base_url.startswith("https://api.openai.com"):
+        logging.warning(f"Using a custom base URL: {args.base_url}. Ensure it is trusted.")
     if not api_key:
         logging.error(f"API key not found in environment variable '{args.api_key_env}'")
         logging.error(f"Please set the environment variable: export {args.api_key_env}=your_api_key")
