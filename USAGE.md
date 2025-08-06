@@ -25,7 +25,7 @@ This is the recommended approach. Create a `.pre-commit-config.yaml` file in you
 
 ```yaml
 repos:
--   repo: https://github.com/randomparity/ai-code-review
+-   repo: https://github.com/randomparity/ai-review-hook
     rev: v1.0.0  # Replace with the desired tag or commit SHA
     hooks:
     -   id: ai-review
@@ -59,7 +59,7 @@ To configure the AI review as a `pre-push` hook, add the following to your `.pre
 
 ```yaml
 repos:
--   repo: https://github.com/randomparity/ai-code-review
+-   repo: https://github.com/randomparity/ai-review-hook
     rev: v1.0.0 # Replace with the desired git tag or commit SHA
     hooks:
     -   id: ai-review-push
