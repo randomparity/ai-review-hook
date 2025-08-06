@@ -21,45 +21,21 @@
 
 To integrate the AI review hook with pre-commit, you'll add a new repository to your `.pre-commit-config.yaml` file.
 
-### Option 1: GitHub Repository
-
 This is the recommended approach. Create a `.pre-commit-config.yaml` file in your project's root directory with the following content:
 
 ```yaml
 repos:
--   repo: https://github.com/dave/ai-code-review
+-   repo: https://github.com/randomparity/ai-code-review
     rev: v1.0.0  # Replace with the desired tag or commit SHA
     hooks:
     -   id: ai-review
         name: AI Code Review
-        args: ['--model', 'gpt-4', '--verbose']
+        args: [
+            '--model', 'gpt-4', 
+            '--verbose', 
+            '--context-lines', '5'
+            ]
 ```
-
-### Option 2: Using a Configuration File
-
-For more complex configurations, you can use a separate configuration file.
-
-1.  Create `ai-review-config.json`:
-
-    ```json
-    {
-      "api_key_env": "OPENAI_API_KEY",
-      "base_url": null,
-      "model": "gpt-4"
-    }
-    ```
-
-2.  Update your `.pre-commit-config.yaml` to reference the configuration file:
-
-    ```yaml
-    repos:
-    -   repo: https://github.com/randomparity/ai-code-review
-        rev: v1.0.0 # Replace with the desired git tag or commit SHA
-        hooks:
-        -   id: ai-review
-            name: AI Code Review
-            args: ['--config-file', 'ai-review-config.json']
-    ```
 
 ### Install and Run
 
@@ -79,13 +55,17 @@ To configure the AI review as a `pre-push` hook, add the following to your `.pre
 
 ```yaml
 repos:
--   repo: https://github.com/dave/ai-code-review
+-   repo: https://github.com/randomparity/ai-code-review
     rev: v1.0.0 # Replace with the desired git tag or commit SHA
     hooks:
     -   id: ai-review-push
         name: AI Code Review (pre-push)
         stages: [pre-push]
-        args: ['--model', 'gpt-4', '--verbose']
+        args: [
+            '--model', 'gpt-4', 
+            '--verbose',
+            '--context-lines', '10'
+            ]
 ```
 
 ### Installation
@@ -126,31 +106,6 @@ export MY_API_KEY="your_key"
 ai-review file.py --api-key-env MY_API_KEY
 ```
 
-### Using Configuration File
-```bash
-ai-review file.py --config-file custom-config.json
-```
-
-### Custom Git Diff Context
-```bash
-# Use more context lines for better AI analysis (default is 3)
-ai-review file.py --context-lines 10
-
-# Use minimal context for focused reviews
-ai-review file.py --context-lines 1
-```
-
-## Configuration File Format
-
-```json
-{
-  "api_key_env": "OPENAI_API_KEY",
-  "base_url": "https://api.openai.com/v1",
-  "model": "gpt-4",
-  "context_lines": 5,
-  "comment": "context_lines controls how much surrounding code context is included in git diff"
-}
-```
 
 ## Environment Variables
 

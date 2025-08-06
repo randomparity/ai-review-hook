@@ -178,10 +178,6 @@ def main():
         help="OpenAI model to use (default: gpt-3.5-turbo)"
     )
     parser.add_argument(
-        "--config-file",
-        help="Path to JSON configuration file"
-    )
-    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -193,62 +189,46 @@ def main():
         default=3,
         help="Number of context lines to include in git diff (default: 3)"
     )
-    
+
     args = parser.parse_args()
-    
-    # Load configuration from file if provided
-    config = {}
-    if args.config_file and os.path.exists(args.config_file):
-        try:
-            with open(args.config_file, 'r') as f:
-                config = json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
-            print(f"Error loading config file: {e}", file=sys.stderr)
-            return 1
-    
-    # Override with command line arguments
-    api_key_env = config.get('api_key_env', args.api_key_env)
-    base_url = config.get('base_url') or args.base_url
-    model = config.get('model', args.model)
-    context_lines = config.get('context_lines', args.context_lines)
-    
+
     # Get API key from environment
-    api_key = os.getenv(api_key_env)
+    api_key = os.getenv(args.api_key_env)
     if not api_key:
-        print(f"Error: API key not found in environment variable '{api_key_env}'", file=sys.stderr)
-        print(f"Please set the environment variable: export {api_key_env}=your_api_key", file=sys.stderr)
+        print(f"Error: API key not found in environment variable '{args.api_key_env}'", file=sys.stderr)
+        print(f"Please set the environment variable: export {args.api_key_env}=your_api_key", file=sys.stderr)
         return 1
-    
+
     if not args.files:
         if args.verbose:
             print("No files to review")
         return 0
-    
+
     # Initialize AI reviewer
     try:
-        reviewer = AIReviewer(api_key=api_key, base_url=base_url, model=model)
+        reviewer = AIReviewer(api_key=api_key, base_url=args.base_url, model=args.model)
     except Exception as e:
         print(f"Error initializing AI reviewer: {e}", file=sys.stderr)
         return 1
-    
+
     # Review each file
     failed_files = []
     all_reviews = []
-    
+
     for filename in args.files:
         if args.verbose:
             print(f"Reviewing {filename}...")
-        
-        passed, review = reviewer.review_file(filename, context_lines)
-        all_reviews.append(f"\n{'='*60}\nFile: {filename}\n{'='*60}\n{review}")
-        
+
+        passed, review = reviewer.review_file(filename, args.context_lines)
+        all_reviews.append(f"\n{'='*60}\nFile: {filename}\\n{'='*60}\\n{review}")
+
         if not passed:
             failed_files.append(filename)
-    
+
     # Print all reviews
     for review in all_reviews:
         print(review)
-    
+
     # Summary
     if failed_files:
         print(f"\n{'='*60}")
