@@ -1,9 +1,0 @@
--   id: ai-review
-    name: AI Code Review
-    description: Perform AI-assisted code review using OpenAI API
-    entry: ai-review
-    language: python
-    files: \.(py|js|ts|java|cpp|c|h|hpp|go|rs|rb|php|scala|kotlin|swift|cs|sh|yaml|yml|json|md)$
-    require_serial: true
-    pass_filenames: true
-    additional_dependencies: ['openai>=1.0.0', 'requests']
