@@ -7,6 +7,7 @@ using the OpenAI API with configurable models and endpoints.
 """
 
 import argparse
+import concurrent.futures
 import logging
 import os
 import re
@@ -63,8 +64,16 @@ SECRET_PATTERNS = [
 ]
 
 
-def redact(text: str) -> str:
-    """Redact secrets from a string using predefined patterns."""
+def redact(text: str, skip_if_empty: bool = False) -> str:
+    """Redact secrets from a string using predefined patterns.
+
+    Args:
+        text: The text to redact secrets from
+        skip_if_empty: Skip redaction if text is empty (performance optimization)
+    """
+    if skip_if_empty and not text.strip():
+        return text
+
     for pattern in SECRET_PATTERNS:
         text = pattern.sub("[REDACTED]", text)
     return text
@@ -218,6 +227,89 @@ Provide specific, actionable feedback with line numbers where possible. If no si
 """
         return prompt
 
+    def truncate_text_with_marker(
+        self, text: str, max_bytes: int, marker: str = "diff"
+    ) -> str:
+        """Truncate text to max_bytes with clear truncation marker."""
+        if max_bytes <= 0:
+            return text
+
+        text_bytes = text.encode("utf-8")
+        if len(text_bytes) <= max_bytes:
+            return text
+
+        # Reserve space for truncation marker
+        marker_text = f"\n\n[TRUNCATED - {marker} was {len(text_bytes)} bytes, showing first {max_bytes} bytes]\n"
+        marker_bytes = len(marker_text.encode("utf-8"))
+
+        if max_bytes <= marker_bytes:
+            return f"[TRUNCATED - {marker} too large ({len(text_bytes)} bytes)]"
+
+        # Truncate to max_bytes - marker size, then decode safely
+        truncated_bytes = text_bytes[: max_bytes - marker_bytes]
+
+        # Avoid cutting in the middle of a UTF-8 character
+        while truncated_bytes:
+            try:
+                truncated_text = truncated_bytes.decode("utf-8")
+                break
+            except UnicodeDecodeError:
+                truncated_bytes = truncated_bytes[:-1]
+        else:
+            truncated_text = "[UNABLE TO DECODE TRUNCATED TEXT]"
+
+        return truncated_text + marker_text
+
+    def extract_changed_hunks(self, diff: str, max_hunks: int = 10) -> str:
+        """Extract only changed hunks from diff, limiting to max_hunks for performance."""
+        if not diff.strip():
+            return diff
+
+        lines = diff.split("\n")
+        hunks = []
+        current_hunk = []
+        hunk_count = 0
+
+        for line in lines:
+            if line.startswith("@@") and current_hunk:
+                # Start of new hunk, save current one
+                if hunk_count < max_hunks:
+                    hunks.append("\n".join(current_hunk))
+                    hunk_count += 1
+                current_hunk = [line]
+            elif line.startswith("@@"):
+                # Start of first hunk
+                current_hunk = [line]
+            elif current_hunk and (
+                line.startswith("+") or line.startswith("-") or line.startswith(" ")
+            ):
+                # Part of current hunk
+                current_hunk.append(line)
+            elif (
+                line.startswith("diff ")
+                or line.startswith("index ")
+                or line.startswith("---")
+                or line.startswith("+++")
+            ):
+                # Diff header, always include
+                if not current_hunk:
+                    hunks.append(line)
+
+        # Add the last hunk if it exists and we haven't hit the limit
+        if current_hunk and hunk_count < max_hunks:
+            hunks.append("\n".join(current_hunk))
+            hunk_count += 1
+
+        result = "\n".join(hunks)
+
+        # Add truncation notice if we hit the limit
+        if hunk_count >= max_hunks and len(lines) > sum(
+            len(hunk.split("\n")) for hunk in hunks
+        ):
+            result += f"\n\n[TRUNCATED - showing first {max_hunks} hunks of diff]\n"
+
+        return result
+
     def review_file(
         self,
         filename: str,
@@ -242,28 +334,35 @@ Provide specific, actionable feedback with line numbers where possible. If no si
         if not diff.strip():
             return True, f"No changes detected in {filename}"
 
-        # Apply size limits
-        if max_diff_bytes > 0 and len(diff.encode("utf-8")) > max_diff_bytes:
-            return (
-                False,
-                f"AI-REVIEW:[FAIL] Diff size ({len(diff.encode('utf-8'))} bytes) exceeds limit ({max_diff_bytes} bytes)",
-            )
+        # Apply size limits with intelligent truncation
+        original_diff_size = len(diff.encode("utf-8"))
+        if max_diff_bytes > 0 and original_diff_size > max_diff_bytes:
+            # Try extracting only changed hunks first
+            diff = self.extract_changed_hunks(diff)
+
+            # If still too large, truncate with clear marker
+            if len(diff.encode("utf-8")) > max_diff_bytes:
+                diff = self.truncate_text_with_marker(diff, max_diff_bytes, "diff")
+                logging.info(
+                    f"Truncated diff for {filename}: {original_diff_size} -> {len(diff.encode('utf-8'))} bytes"
+                )
 
         content = ""
         if not diff_only:
             content = self.get_file_content(filename)
-            if (
-                max_content_bytes > 0
-                and len(content.encode("utf-8")) > max_content_bytes
-            ):
-                return (
-                    False,
-                    f"AI-REVIEW:[FAIL] File content size ({len(content.encode('utf-8'))} bytes) exceeds limit ({max_content_bytes} bytes)",
+            original_content_size = len(content.encode("utf-8"))
+
+            if max_content_bytes > 0 and original_content_size > max_content_bytes:
+                content = self.truncate_text_with_marker(
+                    content, max_content_bytes, "file content"
+                )
+                logging.info(
+                    f"Truncated content for {filename}: {original_content_size} -> {len(content.encode('utf-8'))} bytes"
                 )
 
-        # Redact secrets before sending to the model
+        # Optimized redaction: skip if content is empty (diff-only mode)
         redacted_diff = redact(diff)
-        redacted_content = redact(content) if content else ""
+        redacted_content = redact(content, skip_if_empty=True)
 
         prompt = self.create_review_prompt(
             filename, redacted_diff, redacted_content, diff_only
@@ -385,6 +484,13 @@ def main() -> int:
         help="Allow using custom base URLs other than official OpenAI endpoints",
     )
     parser.add_argument(
+        "--jobs",
+        "-j",
+        type=int,
+        default=1,
+        help="Number of parallel jobs for reviewing multiple files (default: 1)",
+    )
+    parser.add_argument(
         "--output-file",
         help="File to save the complete review output.",
     )
@@ -437,15 +543,12 @@ def main() -> int:
         logging.error(f"Error initializing AI reviewer: {e}")
         return 1
 
-    # Review each file
+    # Review files (with optional parallel processing)
     failed_files = []
     all_reviews = []
 
-    for filename in args.files:
-        logging.info(f"Reviewing {filename}...")
-
-        # This is a synchronous operation. For a large number of files, consider
-        # parallelizing this process using concurrent.futures or similar libraries.
+    def review_single_file(filename: str) -> Tuple[str, bool, str, str]:
+        """Review a single file and return results."""
         diff = reviewer.get_file_diff(filename, args.context_lines)
         passed, review = reviewer.review_file(
             filename,
@@ -454,25 +557,92 @@ def main() -> int:
             max_content_bytes=args.max_content_bytes,
             diff_only=args.diff_only,
         )
+        return filename, passed, review, diff
 
-        if not passed:
-            failed_files.append(filename)
+    if args.jobs == 1 or len(args.files) == 1:
+        # Sequential processing (original behavior)
+        for filename in args.files:
+            logging.info(f"Reviewing {filename}...")
+            filename, passed, review, diff = review_single_file(filename)
 
-        review_log_entry = f"""
+            if not passed:
+                failed_files.append(filename)
+
+            review_log_entry = f"""
 
 {"=" * 60}
 File: {filename}
 {"=" * 60}
 
 """
-        if args.verbose:
-            review_log_entry += f"""Git Diff:
+            if args.verbose:
+                review_log_entry += f"""Git Diff:
 ```
 {diff}```
 
 """
-        review_log_entry += review
-        all_reviews.append(review_log_entry)
+            review_log_entry += review
+            all_reviews.append((filename, review_log_entry))
+    else:
+        # Parallel processing
+        logging.info(
+            f"Reviewing {len(args.files)} files with {args.jobs} parallel jobs..."
+        )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
+            # Submit all jobs
+            future_to_filename = {
+                executor.submit(review_single_file, filename): filename
+                for filename in args.files
+            }
+
+            # Collect results as they complete
+            results = []
+            for future in concurrent.futures.as_completed(future_to_filename):
+                filename = future_to_filename[future]
+                try:
+                    result = future.result()
+                    results.append(result)
+                    logging.info(f"Completed review of {result[0]}")
+                except Exception as exc:
+                    logging.error(f"Review of {filename} generated an exception: {exc}")
+                    # Treat exceptions as failures
+                    results.append(
+                        (
+                            filename,
+                            False,
+                            f"AI-REVIEW:[FAIL] Exception during review: {exc}",
+                            "",
+                        )
+                    )
+
+            # Sort results by original file order
+            filename_to_index = {filename: i for i, filename in enumerate(args.files)}
+            results.sort(key=lambda x: filename_to_index[x[0]])
+
+            # Process results
+            for filename, passed, review, diff in results:
+                if not passed:
+                    failed_files.append(filename)
+
+                review_log_entry = f"""
+
+{"=" * 60}
+File: {filename}
+{"=" * 60}
+
+"""
+                if args.verbose:
+                    review_log_entry += f"""Git Diff:
+```
+{diff}```
+
+"""
+                review_log_entry += review
+                all_reviews.append((filename, review_log_entry))
+
+    # Convert to list of review entries (maintain compatibility)
+    all_reviews = [entry for _, entry in all_reviews]
 
     # Save review to file if requested
     output_file = args.output_file

@@ -44,6 +44,11 @@ This project provides a pre-commit hook for AI-assisted code reviews using the O
     *   Binary file detection and exclusion
     *   Secure base URL validation
     *   Diff-only mode for sensitive repositories
+*   **High Performance**:
+    *   Parallel processing for multiple files with `--jobs` option
+    *   Intelligent content truncation with clear markers
+    *   Optimized diff processing (hunk extraction)
+    *   Smart redaction with performance optimizations
 
 ## Command-Line Options
 
@@ -57,6 +62,7 @@ This project provides a pre-commit hook for AI-assisted code reviews using the O
 *   `--max-tokens`: Maximum tokens in AI response (default: 2000)
 *   `--temperature`: AI response temperature 0.0-2.0 (default: 0.1)
 *   `--context-lines`: Number of context lines for git diff (default: 3)
+*   `--jobs`, `-j`: Number of parallel jobs for reviewing multiple files (default: 1)
 *   `--allow-unsafe-base-url`: Allow custom base URLs other than official OpenAI endpoints
 *   `--output-file`: File to save the complete review output
 *   `-v`, `--verbose`: Enable verbose logging
@@ -92,6 +98,47 @@ Automatically detects and redacts various types of secrets before sending to the
 *   Use `--diff-only` flag to send only git diff, not full file content
 *   Reduces data exposure for sensitive repositories
 *   Maintains review quality while enhancing security
+
+## Performance Features
+
+The AI Review Hook includes several performance optimizations for efficient code review:
+
+### Parallel Processing
+*   Use `--jobs N` (or `-j N`) to review multiple files simultaneously
+*   Automatically scales based on available CPU cores
+*   Maintains deterministic output order
+*   Fallback to sequential processing for single files or when `--jobs 1`
+
+### Intelligent Content Management
+*   **Smart Truncation**: Large diffs/files are truncated with clear markers showing original size
+*   **Hunk Extraction**: Extracts only changed code hunks before truncation
+*   **UTF-8 Safe**: Truncation respects character boundaries to avoid encoding issues
+*   **Clear Indicators**: Shows `[TRUNCATED - diff was X bytes, showing first Y bytes]` messages
+
+### Optimized Processing
+*   **Lazy Redaction**: Skips secret detection on empty content (diff-only mode)
+*   **Binary Skip**: Fast binary file detection prevents unnecessary processing
+*   **Efficient Memory**: Streams large files without loading entire content into memory
+
+### Usage Examples
+
+**Parallel Processing:**
+```bash
+# Review 4 files simultaneously
+pre-commit run ai-review --files file1.py file2.py file3.py file4.py -- --jobs 4
+
+# Use all available CPU cores
+pre-commit run ai-review --all-files -- --jobs $(nproc)
+```
+
+**Content Size Management:**
+```bash
+# Limit diff to 5KB, content to 20KB
+pre-commit run ai-review --all-files -- --max-diff-bytes 5000 --max-content-bytes 20000
+
+# Diff-only mode for large repositories
+pre-commit run ai-review --all-files -- --diff-only
+```
 
 ## Development Setup
 

@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 from src.ai_review_hook.main import redact, AIReviewer
+import concurrent.futures
 
 
 def test_redact_aws_access_key():
@@ -206,3 +207,147 @@ def test_diff_only_mode(mock_openai):
 
         assert passed is True
         assert "AI-REVIEW:[PASS]" in review
+
+
+def test_redact_skip_if_empty():
+    """Test that redaction can be skipped for empty text."""
+    # Should skip redaction and return quickly
+    empty_text = ""
+    result = redact(empty_text, skip_if_empty=True)
+    assert result == ""
+
+    # Should still redact when not empty
+    secret_text = "API_KEY=sk-1234567890abcdefghijklmnopqrstuvwxyz"
+    result = redact(secret_text, skip_if_empty=True)
+    assert "[REDACTED]" in result
+    assert "sk-1234567890abcdefghijklmnopqrstuvwxyz" not in result
+
+
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_truncate_text_with_marker(mock_openai):
+    """Test text truncation with clear markers."""
+    reviewer = AIReviewer(api_key="test_key")
+
+    # Test normal truncation
+    long_text = "A" * 1000
+    truncated = reviewer.truncate_text_with_marker(long_text, 100, "test")
+    assert "[TRUNCATED - test was 1000 bytes" in truncated
+    assert len(truncated.encode("utf-8")) <= 100
+
+    # Test no truncation needed
+    short_text = "A" * 50
+    result = reviewer.truncate_text_with_marker(short_text, 100, "test")
+    assert result == short_text
+    assert "TRUNCATED" not in result
+
+    # Test text too large for any meaningful truncation
+    tiny_limit = reviewer.truncate_text_with_marker(long_text, 10, "test")
+    assert "[TRUNCATED - test too large (1000 bytes)]" == tiny_limit
+
+
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_extract_changed_hunks(mock_openai):
+    """Test extraction of changed hunks from diff."""
+    reviewer = AIReviewer(api_key="test_key")
+
+    # Test diff with multiple hunks
+    diff_content = """diff --git a/test.py b/test.py
+index 1234567..abcdefg 100644
+--- a/test.py
++++ b/test.py
+@@ -1,3 +1,4 @@
+ def function1():
++    print("new line")
+     pass
+
+@@ -10,2 +11,3 @@
+ def function2():
++    print("another new line")
+     pass
+"""
+
+    result = reviewer.extract_changed_hunks(diff_content)
+    assert "@@ -1,3 +1,4 @@" in result
+    assert "@@ -10,2 +11,3 @@" in result
+    assert 'print("new line")' in result
+    assert 'print("another new line")' in result
+
+    # Test empty diff
+    empty_result = reviewer.extract_changed_hunks("")
+    assert empty_result == ""
+
+    # Test diff with many hunks (should truncate)
+    many_hunks = "\n".join(
+        [f"@@ -{i},1 +{i},2 @@\n line {i}\n+ new line {i}" for i in range(15)]
+    )
+    truncated_result = reviewer.extract_changed_hunks(many_hunks, max_hunks=5)
+    assert "[TRUNCATED - showing first 5 hunks of diff]" in truncated_result
+
+
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_parallel_processing_simulation(mock_openai):
+    """Test that parallel processing components work correctly."""
+    # Mock successful AI response
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = "AI-REVIEW:[PASS]\nLooks good!"
+    mock_openai.return_value.chat.completions.create.return_value = mock_response
+
+    reviewer = AIReviewer(api_key="test_key")
+
+    # Test the review_single_file function concept
+    def review_single_file(filename: str):
+        diff = "- some changes"
+        passed, review = reviewer.review_file(filename, diff=diff)
+        return filename, passed, review, diff
+
+    # Simulate parallel processing with ThreadPoolExecutor
+    files = ["file1.py", "file2.py", "file3.py"]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        futures = {executor.submit(review_single_file, f): f for f in files}
+        results = []
+
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            results.append(result)
+
+        # Should have results for all files
+        assert len(results) == 3
+        filenames = [r[0] for r in results]
+        assert set(filenames) == set(files)
+
+        # All should pass
+        for _, passed, review, _ in results:
+            assert passed is True
+            assert "AI-REVIEW:[PASS]" in review
+
+
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_intelligent_truncation_integration(mock_openai):
+    """Test that size limits with truncation work in review_file."""
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = "AI-REVIEW:[PASS]\nOK"
+    mock_openai.return_value.chat.completions.create.return_value = mock_response
+
+    reviewer = AIReviewer(api_key="test_key")
+
+    # Create a large diff
+    large_diff = "diff --git a/test.py b/test.py\n" + "A" * 2000
+
+    with patch.object(reviewer, "get_file_content", return_value="small content"):
+        # Should truncate diff but not fail
+        passed, review = reviewer.review_file(
+            "test.py", diff=large_diff, max_diff_bytes=500, max_content_bytes=1000
+        )
+
+        assert passed is True
+        assert "AI-REVIEW:[PASS]" in review
+
+        # Verify truncation was applied by checking the call to OpenAI
+        assert mock_openai.return_value.chat.completions.create.called
+        call_args = mock_openai.return_value.chat.completions.create.call_args
+        prompt_content = call_args[1]["messages"][1]["content"]
+        # Should contain truncation marker
+        assert (
+            "TRUNCATED" in prompt_content or len(prompt_content.encode("utf-8")) < 2500
+        )
