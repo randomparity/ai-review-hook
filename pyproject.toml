@@ -1,3 +1,6 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
 [tool.ruff]
 src = ["ai_review_hook"]
 
