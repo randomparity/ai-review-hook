@@ -351,3 +351,303 @@ def test_intelligent_truncation_integration(mock_openai):
         assert (
             "TRUNCATED" in prompt_content or len(prompt_content.encode("utf-8")) < 2500
         )
+
+
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_is_retryable_error(mock_openai):
+    """Test that retryable errors are correctly identified."""
+    import openai
+
+    reviewer = AIReviewer(api_key="test_key")
+
+    # Create mock errors with proper structure
+    def create_mock_api_error(error_class, message="Error", status_code=None):
+        error = MagicMock(spec=error_class)
+        if status_code:
+            error.status_code = status_code
+        return error
+
+    # Test retryable errors
+    assert reviewer._is_retryable_error(
+        create_mock_api_error(openai.RateLimitError, "Rate limited", 429)
+    )
+    assert reviewer._is_retryable_error(
+        create_mock_api_error(openai.APITimeoutError, "Timeout")
+    )
+    assert reviewer._is_retryable_error(
+        create_mock_api_error(openai.APIConnectionError, "Connection error")
+    )
+    assert reviewer._is_retryable_error(
+        create_mock_api_error(openai.InternalServerError, "Server error", 500)
+    )
+    assert reviewer._is_retryable_error(
+        create_mock_api_error(openai.UnprocessableEntityError, "Overloaded", 422)
+    )
+
+    # Test non-retryable errors
+    assert not reviewer._is_retryable_error(
+        create_mock_api_error(openai.AuthenticationError, "Invalid key", 401)
+    )
+    assert not reviewer._is_retryable_error(ValueError("Bad value"))
+
+    # Test status code checking
+    class MockErrorWithStatus(Exception):
+        def __init__(self, status_code):
+            self.status_code = status_code
+
+    # Retryable status codes
+    assert reviewer._is_retryable_error(MockErrorWithStatus(429))
+    assert reviewer._is_retryable_error(MockErrorWithStatus(502))
+    assert reviewer._is_retryable_error(MockErrorWithStatus(503))
+    assert reviewer._is_retryable_error(MockErrorWithStatus(504))
+
+    # Non-retryable status codes
+    assert not reviewer._is_retryable_error(MockErrorWithStatus(400))
+    assert not reviewer._is_retryable_error(MockErrorWithStatus(401))
+    assert not reviewer._is_retryable_error(MockErrorWithStatus(403))
+
+
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_calculate_retry_delay(mock_openai):
+    """Test that retry delays are calculated correctly with exponential backoff and jitter."""
+    reviewer = AIReviewer(
+        api_key="test_key",
+        initial_retry_delay=1.0,
+        max_retry_delay=10.0,
+        retry_jitter=0.1,
+    )
+
+    # Test exponential backoff
+    delay_0 = reviewer._calculate_retry_delay(0)
+    delay_1 = reviewer._calculate_retry_delay(1)
+    delay_2 = reviewer._calculate_retry_delay(2)
+
+    # Should grow exponentially (with jitter)
+    assert 0.9 <= delay_0 <= 1.1  # ~1.0 with jitter
+    assert 1.8 <= delay_1 <= 2.2  # ~2.0 with jitter
+    assert 3.6 <= delay_2 <= 4.4  # ~4.0 with jitter
+
+    # Test max delay cap
+    delay_large = reviewer._calculate_retry_delay(
+        10
+    )  # Should be capped at max_retry_delay
+    assert delay_large <= reviewer.max_retry_delay * 1.1  # Allow for jitter
+
+
+@patch("src.ai_review_hook.main.time.sleep")
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_retry_on_rate_limit(mock_openai, mock_sleep):
+    """Test that rate limit errors trigger retries."""
+    import openai
+
+    # Configure reviewer with fast retries for testing
+    reviewer = AIReviewer(
+        api_key="test_key", max_retries=2, initial_retry_delay=0.1, retry_jitter=0.0
+    )
+
+    # Mock rate limit error on first two calls, success on third
+    mock_client = mock_openai.return_value
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = "AI-REVIEW:[PASS]\nSuccess after retry!"
+
+    # Create test exception classes that inherit from the real ones
+    class TestRateLimitError(openai.RateLimitError):
+        def __init__(self, message="Rate limited"):
+            self.status_code = 429
+            self.message = message
+            # Don't call super().__init__ to avoid constructor issues
+
+    rate_limit_error = TestRateLimitError()
+
+    mock_client.chat.completions.create.side_effect = [
+        rate_limit_error,
+        rate_limit_error,
+        mock_response,
+    ]
+
+    messages = [{"role": "user", "content": "test"}]
+    result = reviewer._make_api_call_with_retry(messages, "test.py")
+
+    # Should succeed after retries
+    assert result == "AI-REVIEW:[PASS]\nSuccess after retry!"
+
+    # Should have made 3 API calls
+    assert mock_client.chat.completions.create.call_count == 3
+
+    # Should have slept twice (between attempts)
+    assert mock_sleep.call_count == 2
+
+
+@patch("src.ai_review_hook.main.time.sleep")
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_retry_exhaustion(mock_openai, mock_sleep):
+    """Test that retries are exhausted and final error is raised."""
+    import openai
+
+    reviewer = AIReviewer(
+        api_key="test_key", max_retries=2, initial_retry_delay=0.1, retry_jitter=0.0
+    )
+
+    # Create test exception class
+    class TestRateLimitError(openai.RateLimitError):
+        def __init__(self, message="Rate limited"):
+            self.status_code = 429
+            self.message = message
+
+    # Mock rate limit error on all calls
+    mock_client = mock_openai.return_value
+    rate_limit_error = TestRateLimitError()
+    mock_client.chat.completions.create.side_effect = rate_limit_error
+
+    messages = [{"role": "user", "content": "test"}]
+
+    # Should raise the final error after exhausting retries
+    try:
+        reviewer._make_api_call_with_retry(messages, "test.py")
+        assert False, "Should have raised an exception"
+    except openai.RateLimitError:
+        pass  # Expected
+
+    # Should have made max_retries + 1 calls
+    assert mock_client.chat.completions.create.call_count == 3
+
+    # Should have slept max_retries times
+    assert mock_sleep.call_count == 2
+
+
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_non_retryable_error_no_retry(mock_openai):
+    """Test that non-retryable errors don't trigger retries."""
+    import openai
+
+    reviewer = AIReviewer(api_key="test_key", max_retries=2)
+
+    # Create test exception class
+    class TestAuthenticationError(openai.AuthenticationError):
+        def __init__(self, message="Invalid API key"):
+            self.status_code = 401
+            self.message = message
+
+    # Mock non-retryable error
+    mock_client = mock_openai.return_value
+    auth_error = TestAuthenticationError()
+    mock_client.chat.completions.create.side_effect = auth_error
+
+    messages = [{"role": "user", "content": "test"}]
+
+    # Should raise immediately without retrying
+    try:
+        reviewer._make_api_call_with_retry(messages, "test.py")
+        assert False, "Should have raised an exception"
+    except openai.AuthenticationError:
+        pass  # Expected
+
+    # Should have made only 1 call (no retries)
+    assert mock_client.chat.completions.create.call_count == 1
+
+
+@patch("src.ai_review_hook.main.time.sleep")
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_retry_with_different_error_types(mock_openai, mock_sleep):
+    """Test retry behavior with different types of retryable errors."""
+    import openai
+
+    reviewer = AIReviewer(
+        api_key="test_key", max_retries=3, initial_retry_delay=0.1, retry_jitter=0.0
+    )
+
+    # Mock different retryable errors, then success
+    mock_client = mock_openai.return_value
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = "AI-REVIEW:[PASS]\nSuccess!"
+
+    # Create test exception classes
+    class TestRateLimitError(openai.RateLimitError):
+        def __init__(self):
+            self.status_code = 429
+
+    class TestAPITimeoutError(openai.APITimeoutError):
+        def __init__(self):
+            pass
+
+    class TestAPIConnectionError(openai.APIConnectionError):
+        def __init__(self):
+            pass
+
+    # Create errors properly
+    error1 = TestRateLimitError()
+    error2 = TestAPITimeoutError()
+    error3 = TestAPIConnectionError()
+
+    mock_client.chat.completions.create.side_effect = [
+        error1,
+        error2,
+        error3,
+        mock_response,
+    ]
+
+    messages = [{"role": "user", "content": "test"}]
+    result = reviewer._make_api_call_with_retry(messages, "test.py")
+
+    # Should succeed after multiple different errors
+    assert result == "AI-REVIEW:[PASS]\nSuccess!"
+    assert mock_client.chat.completions.create.call_count == 4
+    assert mock_sleep.call_count == 3
+
+
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_review_file_with_retry_integration(mock_openai):
+    """Test that review_file properly integrates with retry mechanism."""
+    import openai
+
+    reviewer = AIReviewer(
+        api_key="test_key", max_retries=1, initial_retry_delay=0.01, retry_jitter=0.0
+    )
+
+    # Mock rate limit error on first call, success on second
+    mock_client = mock_openai.return_value
+    mock_response = MagicMock()
+    mock_response.choices[
+        0
+    ].message.content = "AI-REVIEW:[PASS]\nLooks good after retry!"
+
+    # Create test exception class
+    class TestRateLimitError(openai.RateLimitError):
+        def __init__(self):
+            self.status_code = 429
+
+    rate_limit_error = TestRateLimitError()
+    mock_client.chat.completions.create.side_effect = [rate_limit_error, mock_response]
+
+    with patch("src.ai_review_hook.main.time.sleep"):
+        passed, review = reviewer.review_file("test.py", diff="- some changes")
+
+    # Should succeed after retry
+    assert passed is True
+    assert "AI-REVIEW:[PASS]" in review
+    assert "Looks good after retry!" in review
+
+    # Should have made 2 API calls
+    assert mock_client.chat.completions.create.call_count == 2
+
+
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_retry_configuration_parameters(mock_openai):
+    """Test that retry configuration parameters are properly set."""
+    reviewer = AIReviewer(
+        api_key="test_key",
+        max_retries=5,
+        initial_retry_delay=2.0,
+        max_retry_delay=120.0,
+        retry_jitter=0.2,
+    )
+
+    assert reviewer.max_retries == 5
+    assert reviewer.initial_retry_delay == 2.0
+    assert reviewer.max_retry_delay == 120.0
+    assert reviewer.retry_jitter == 0.2
+
+    # Test delay calculation with custom parameters
+    delay = reviewer._calculate_retry_delay(1)
+    # Should be around 4.0 (2.0 * 2^1) with up to 20% jitter
+    assert 3.2 <= delay <= 4.8
