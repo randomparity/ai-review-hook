@@ -1,3 +1,6 @@
+[tool.ruff]
+src = ["ai_review_hook"]
+
 [build-system]
 requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -36,5 +39,5 @@ Homepage = "https://github.com/randomparity/ai-review-hook"
 Repository = "https://github.com/randomparity/ai-review-hook"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = ["ai_review_hook*"]
