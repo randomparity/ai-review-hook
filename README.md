@@ -39,7 +39,11 @@ This project provides a pre-commit hook for AI-assisted code reviews using the O
 *   Configurable OpenAI model and endpoint
 *   Use environment variables for API keys
 *   Customizable through command-line arguments
-*   Redacts secrets from code before sending to the model
+*   **Enhanced Security**:
+    *   Comprehensive secret redaction (AWS, GitHub, Slack, JWT, API keys, database URLs, etc.)
+    *   Binary file detection and exclusion
+    *   Secure base URL validation
+    *   Diff-only mode for sensitive repositories
 
 ## Command-Line Options
 
@@ -53,8 +57,41 @@ This project provides a pre-commit hook for AI-assisted code reviews using the O
 *   `--max-tokens`: Maximum tokens in AI response (default: 2000)
 *   `--temperature`: AI response temperature 0.0-2.0 (default: 0.1)
 *   `--context-lines`: Number of context lines for git diff (default: 3)
+*   `--allow-unsafe-base-url`: Allow custom base URLs other than official OpenAI endpoints
 *   `--output-file`: File to save the complete review output
 *   `-v`, `--verbose`: Enable verbose logging
+
+## Security Features
+
+The AI Review Hook includes comprehensive security measures to protect sensitive information:
+
+### Secret Detection & Redaction
+Automatically detects and redacts various types of secrets before sending to the AI model:
+
+*   **AWS Credentials**: Access keys, secret keys
+*   **GitHub Tokens**: Personal access tokens, OAuth tokens, server-to-server tokens
+*   **API Keys**: Generic API keys, tokens, and secrets
+*   **JWT Tokens**: JSON Web Tokens
+*   **Bearer Tokens**: Authorization headers and bearer tokens
+*   **Slack Tokens**: Slack API tokens
+*   **OpenAI Keys**: OpenAI API keys
+*   **Database URLs**: Connection strings with credentials
+*   **Private Keys**: RSA, EC, DSA, OpenSSH, PGP keys and certificates
+
+### Binary File Protection
+*   Automatically detects binary files using heuristics
+*   Excludes binary content from being sent to the AI model
+*   Shows "[BINARY FILE - Content not shown for security]" placeholder
+
+### Secure Endpoint Validation
+*   By default, only allows official OpenAI API endpoints
+*   Custom endpoints require explicit `--allow-unsafe-base-url` flag
+*   Clear warnings when using non-official endpoints
+
+### Diff-Only Mode
+*   Use `--diff-only` flag to send only git diff, not full file content
+*   Reduces data exposure for sensitive repositories
+*   Maintains review quality while enhancing security
 
 ## Development Setup
 

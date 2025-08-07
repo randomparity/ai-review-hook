@@ -119,3 +119,90 @@ def test_review_file_generic_error(mock_openai):
         assert passed is False
         assert "Unexpected error during AI review" in review
         assert "Something went wrong" in review
+
+
+def test_redact_github_tokens():
+    """Test that GitHub tokens are redacted."""
+    text = "Here is a GitHub PAT: ghp_1234567890abcdefghijklmnopqrstuvwxyz"
+    redacted_text = redact(text)
+    assert "[REDACTED]" in redacted_text
+    assert "ghp_1234567890abcdefghijklmnopqrstuvwxyz" not in redacted_text
+
+
+def test_redact_bearer_tokens():
+    """Test that Bearer tokens are redacted."""
+    text = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+    redacted_text = redact(text)
+    assert "[REDACTED]" in redacted_text
+    assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in redacted_text
+
+
+def test_redact_jwt_tokens():
+    """Test that JWT tokens are redacted."""
+    text = "Token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.EkN-DOsnsuRjRO6BxXemmJDm3HbxrbRzXglbN2S4sOkopdU4IsDxTI8jO19W_A4K8ZPJijNLis4EZsHeY559a4DFOd50_OqgHs3VMObvQA0jNEOqZlFIkVW5_32vlnqgQ"
+    redacted_text = redact(text)
+    assert "[REDACTED]" in redacted_text
+    assert "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9" not in redacted_text
+
+
+def test_redact_slack_tokens():
+    """Test that Slack tokens are redacted."""
+    text = "Slack token: xoxb-123-456-789abcdefghijklmnopqr"
+    redacted_text = redact(text)
+    assert "[REDACTED]" in redacted_text
+    assert "xoxb-123-456-789abcdefghijklmnopqr" not in redacted_text
+
+
+def test_redact_database_urls():
+    """Test that database URLs with credentials are redacted."""
+    text = "DATABASE_URL=postgresql://user:password@localhost:5432/mydb"
+    redacted_text = redact(text)
+    assert "[REDACTED]" in redacted_text
+    assert "user:password" not in redacted_text
+
+
+def test_redact_generic_api_keys():
+    """Test that generic API keys are redacted."""
+    text = "API_KEY=sk-1234567890abcdefghijklmnopqrstuvwxyz"
+    redacted_text = redact(text)
+    assert "[REDACTED]" in redacted_text
+    assert "sk-1234567890abcdefghijklmnopqrstuvwxyz" not in redacted_text
+
+
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_binary_file_detection(mock_openai):
+    """Test that binary files are detected and handled securely."""
+    reviewer = AIReviewer(api_key="test_key")
+
+    # Mock is_binary_file to return True
+    with patch.object(reviewer, "is_binary_file", return_value=True):
+        content = reviewer.get_file_content("test.bin")
+        assert "[BINARY FILE - Content not shown for security]" in content
+        assert content.startswith("[BINARY FILE")
+
+
+@patch("src.ai_review_hook.main.openai.OpenAI")
+def test_diff_only_mode(mock_openai):
+    """Test that diff-only mode works correctly."""
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = "AI-REVIEW:[PASS]\nLooks good!"
+    mock_openai.return_value.chat.completions.create.return_value = mock_response
+
+    reviewer = AIReviewer(api_key="test_key")
+
+    # Mock the create_review_prompt method to capture arguments
+    with patch.object(
+        reviewer, "create_review_prompt", return_value="test prompt"
+    ) as mock_prompt:
+        passed, review = reviewer.review_file(
+            "test.py", diff="- some changes", diff_only=True
+        )
+
+        # Verify that diff_only=True was passed to create_review_prompt
+        mock_prompt.assert_called_once()
+        args, kwargs = mock_prompt.call_args
+        # The call should include diff_only=True as the 4th argument
+        assert len(args) >= 4 and args[3] is True
+
+        assert passed is True
+        assert "AI-REVIEW:[PASS]" in review
