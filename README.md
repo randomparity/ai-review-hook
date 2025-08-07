@@ -2,10 +2,6 @@
 
 This project provides a pre-commit hook for AI-assisted code reviews using the OpenAI API.
 
-# AI Review Hook
-
-This project provides a pre-commit hook for AI-assisted code reviews using the OpenAI API.
-
 ## Quick Start
 
 1.  **Install the hook** by adding the following to your `.pre-commit-config.yaml`:
