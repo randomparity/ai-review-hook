@@ -2,47 +2,58 @@
 
 This project provides a pre-commit hook for AI-assisted code reviews using the OpenAI API.
 
+# AI Review Hook
+
+This project provides a pre-commit hook for AI-assisted code reviews using the OpenAI API.
+
+## Quick Start
+
+1.  **Install the hook** by adding the following to your `.pre-commit-config.yaml`:
+
+    ```yaml
+    repos:
+    -   repo: https://github.com/randomparity/ai-review-hook
+        rev: v1.0.0  # Replace with the desired tag or commit SHA
+        hooks:
+        -   id: ai-review
+    ```
+
+2.  **Set your OpenAI API key**:
+
+    ```bash
+    export OPENAI_API_KEY="your_api_key_here"
+    ```
+
+3.  **Install and run the hooks**:
+
+    ```bash
+    pip install pre-commit
+    pre-commit install
+    pre-commit run ai-review --all-files
+    ```
+
+For more detailed usage instructions, including pre-push setup and command-line options, please see the [Usage Guide](USAGE.md).
+
 ## Features
 
-- Perform automated code reviews with AI assistance
-- Configurable OpenAI model and endpoint
-- Use environment variables for API keys
-- Customizable through command-line arguments and configuration files
+*   Perform automated code reviews with AI assistance
+*   Configurable OpenAI model and endpoint
+*   Use environment variables for API keys
+*   Customizable through command-line arguments
+*   Redacts secrets from code before sending to the model
 
-## Installation
+## Command-Line Options
 
-```sh
-pip install .
-```
-
-## Configuration
-
-A sample configuration file `ai-review-config.json` is provided. You can customize the model, API key environment variable, and base URL.
-
-## Usage
-
-Add the following to your `.pre-commit-config.yaml`:
-
-```yaml
--   repo: local
-    hooks:
-    -   id: ai-review
-```
-
-Run the pre-commit hook manually:
-
-```sh
-pre-commit run ai-review --all-files
-```
-
-## Command Line Options
-
-- `--api-key-env`: Specify environment variable for API key (default: `OPENAI_API_KEY`)
-- `--base-url`: Set a custom API base URL
-- `--model`: Choose OpenAI model (default: `gpt-3.5-turbo`)
-- `--config-file`: Specify path to a JSON configuration file
-- `--context-lines`: Number of context lines in git diff (default: 3)
-- `--verbose, -v`: Enable verbose output
+*   `--api-key-env`: Environment variable for the OpenAI API key (default: `OPENAI_API_KEY`)
+*   `--base-url`: Custom API base URL for compatible APIs
+*   `--model`: OpenAI model to use (default: `gpt-4o-mini`)
+*   `--timeout`: API request timeout in seconds (default: 30)
+*   `--max-diff-bytes`: Maximum diff size to send (default: 10000)
+*   `--max-content-bytes`: Maximum file content size to send (0 for no limit)
+*   `--diff-only`: Only send the diff to the model
+*   `--context-lines`: Number of context lines for git diff (default: 3)
+*   `--output-file`: File to save the complete review output
+*   `-v`, `--verbose`: Enable verbose logging
 
 ## Development Setup
 
@@ -59,5 +70,7 @@ pre-commit install
 ```
 
 Now, every time you commit your changes, the pre-commit hooks will automatically run, checking for any issues. If any are found, the commit will be aborted, allowing you to fix the issues before committing again.
+
+## License
 
 MIT License
