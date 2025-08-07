@@ -12,7 +12,12 @@ import os
 import re
 import subprocess
 import sys
-from typing import Tuple
+from typing import Optional, Tuple
+
+# Constants
+DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MAX_TOKENS = 2000
+DEFAULT_TEMPERATURE = 0.1
 
 # Secret detection patterns
 SECRET_PATTERNS = [
@@ -49,9 +54,11 @@ class AIReviewer:
     def __init__(
         self,
         api_key: str,
-        base_url: str = None,
-        model: str = "gpt-4o-mini",
+        base_url: Optional[str] = None,
+        model: str = DEFAULT_MODEL,
         timeout: int = 30,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        temperature: float = DEFAULT_TEMPERATURE,
     ):
         """
         Initialize the AI reviewer.
@@ -61,8 +68,12 @@ class AIReviewer:
             base_url: Custom API base URL (optional)
             model: Model to use for review
             timeout: Timeout for API requests in seconds
+            max_tokens: Maximum tokens in AI response
+            temperature: AI response temperature (0.0-2.0)
         """
         self.model = model
+        self.max_tokens = max_tokens
+        self.temperature = temperature
         self.client = openai.OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
 
     def get_file_diff(self, filename: str, context_lines: int = 3) -> str:
@@ -142,7 +153,12 @@ Provide specific, actionable feedback with line numbers where possible. If no si
 """
 
     def review_file(
-        self, filename: str, diff: str, context_lines: int = 3
+        self,
+        filename: str,
+        diff: str,
+        max_diff_bytes: int = 0,
+        max_content_bytes: int = 0,
+        diff_only: bool = False,
     ) -> Tuple[bool, str]:
         """
         Review a single file using AI.
@@ -150,7 +166,9 @@ Provide specific, actionable feedback with line numbers where possible. If no si
         Args:
             filename: Path to the file to review
             diff: The git diff of the file
-            context_lines: Number of context lines to include in git diff
+            max_diff_bytes: Maximum diff size to send (0 for no limit)
+            max_content_bytes: Maximum file content size to send (0 for no limit)
+            diff_only: Only send the diff to the model, not full content
 
         Returns:
             Tuple of (passed, review_message)
@@ -158,11 +176,28 @@ Provide specific, actionable feedback with line numbers where possible. If no si
         if not diff.strip():
             return True, f"No changes detected in {filename}"
 
-        content = self.get_file_content(filename)
+        # Apply size limits
+        if max_diff_bytes > 0 and len(diff.encode("utf-8")) > max_diff_bytes:
+            return (
+                False,
+                f"AI-REVIEW:[FAIL] Diff size ({len(diff.encode('utf-8'))} bytes) exceeds limit ({max_diff_bytes} bytes)",
+            )
+
+        content = ""
+        if not diff_only:
+            content = self.get_file_content(filename)
+            if (
+                max_content_bytes > 0
+                and len(content.encode("utf-8")) > max_content_bytes
+            ):
+                return (
+                    False,
+                    f"AI-REVIEW:[FAIL] File content size ({len(content.encode('utf-8'))} bytes) exceeds limit ({max_content_bytes} bytes)",
+                )
 
         # Redact secrets before sending to the model
         redacted_diff = redact(diff)
-        redacted_content = redact(content)
+        redacted_content = redact(content) if content else ""
 
         prompt = self.create_review_prompt(filename, redacted_diff, redacted_content)
 
@@ -176,11 +211,15 @@ Provide specific, actionable feedback with line numbers where possible. If no si
                     },
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=2000,
-                temperature=0.1,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
             )
 
             review_text = response.choices[0].message.content
+
+            # Guard against empty review_text
+            if not review_text or not review_text.strip():
+                return False, "AI-REVIEW:[FAIL] Empty or blank response from AI model"
 
             # Fail-closed: FAIL takes precedence. Check the first line for a definitive marker.
             match = re.match(
@@ -203,9 +242,18 @@ Provide specific, actionable feedback with line numbers where possible. If no si
             return False, f"AI-REVIEW[MISSING]\n\n{review_text}"
 
         except openai.APIError as e:
+            # Defensively format API error - fields may vary by SDK version
+            status_code = getattr(e, "status_code", "unknown")
+            message = getattr(e, "message", str(e))
             return (
                 False,
-                f"AI-REVIEW:[FAIL] OpenAI API Error: {e.status_code} - {e.message}",
+                f"AI-REVIEW:[FAIL] OpenAI API Error: {status_code} - {message}",
+            )
+        except Exception as e:
+            # Catch any other unexpected exceptions
+            return (
+                False,
+                f"AI-REVIEW:[FAIL] Unexpected error during AI review: {str(e)}",
             )
 
 
@@ -224,8 +272,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--model",
-        default="gpt-3.5-turbo",
-        help="OpenAI model to use (default: gpt-4o-mini)",
+        default=DEFAULT_MODEL,
+        help=f"OpenAI model to use (default: {DEFAULT_MODEL})",
     )
     parser.add_argument(
         "--timeout", type=int, default=30, help="API request timeout in seconds"
@@ -250,6 +298,18 @@ def main() -> int:
         type=int,
         default=3,
         help="Number of context lines to include in git diff (default: 3)",
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=DEFAULT_MAX_TOKENS,
+        help=f"Maximum tokens in AI response (default: {DEFAULT_MAX_TOKENS})",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=DEFAULT_TEMPERATURE,
+        help=f"AI response temperature 0.0-2.0 (default: {DEFAULT_TEMPERATURE})",
     )
     parser.add_argument(
         "--output-file",
@@ -286,6 +346,8 @@ def main() -> int:
             base_url=args.base_url,
             model=args.model,
             timeout=args.timeout,
+            max_tokens=args.max_tokens,
+            temperature=args.temperature,
         )
     except Exception as e:
         logging.error(f"Error initializing AI reviewer: {e}")
@@ -302,8 +364,15 @@ def main() -> int:
         # parallelizing this process using concurrent.futures or similar libraries.
         diff = reviewer.get_file_diff(filename, args.context_lines)
         passed, review = reviewer.review_file(
-            filename, diff=diff, context_lines=args.context_lines
+            filename,
+            diff=diff,
+            max_diff_bytes=args.max_diff_bytes,
+            max_content_bytes=args.max_content_bytes,
+            diff_only=args.diff_only,
         )
+
+        if not passed:
+            failed_files.append(filename)
 
         review_log_entry = f"""
 

@@ -47,9 +47,11 @@ This project provides a pre-commit hook for AI-assisted code reviews using the O
 *   `--base-url`: Custom API base URL for compatible APIs
 *   `--model`: OpenAI model to use (default: `gpt-4o-mini`)
 *   `--timeout`: API request timeout in seconds (default: 30)
-*   `--max-diff-bytes`: Maximum diff size to send (default: 10000)
-*   `--max-content-bytes`: Maximum file content size to send (0 for no limit)
-*   `--diff-only`: Only send the diff to the model
+*   `--max-diff-bytes`: Maximum diff size to send in bytes (default: 10000)
+*   `--max-content-bytes`: Maximum file content size to send in bytes (0 for no limit, default: 0)
+*   `--diff-only`: Only send the diff to the model, not the full file content
+*   `--max-tokens`: Maximum tokens in AI response (default: 2000)
+*   `--temperature`: AI response temperature 0.0-2.0 (default: 0.1)
 *   `--context-lines`: Number of context lines for git diff (default: 3)
 *   `--output-file`: File to save the complete review output
 *   `-v`, `--verbose`: Enable verbose logging
