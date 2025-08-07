@@ -217,6 +217,10 @@ Provide specific, actionable feedback with line numbers where possible. If no si
 
             review_text = response.choices[0].message.content
 
+            # Guard against empty review_text
+            if not review_text or not review_text.strip():
+                return False, "AI-REVIEW:[FAIL] Empty or blank response from AI model"
+
             # Fail-closed: FAIL takes precedence. Check the first line for a definitive marker.
             match = re.match(
                 r"^AI-REVIEW:\\[(PASS|FAIL)\\]", review_text.strip(), re.IGNORECASE
@@ -238,9 +242,18 @@ Provide specific, actionable feedback with line numbers where possible. If no si
             return False, f"AI-REVIEW[MISSING]\n\n{review_text}"
 
         except openai.APIError as e:
+            # Defensively format API error - fields may vary by SDK version
+            status_code = getattr(e, "status_code", "unknown")
+            message = getattr(e, "message", str(e))
             return (
                 False,
-                f"AI-REVIEW:[FAIL] OpenAI API Error: {e.status_code} - {e.message}",
+                f"AI-REVIEW:[FAIL] OpenAI API Error: {status_code} - {message}",
+            )
+        except Exception as e:
+            # Catch any other unexpected exceptions
+            return (
+                False,
+                f"AI-REVIEW:[FAIL] Unexpected error during AI review: {str(e)}",
             )
 
 
