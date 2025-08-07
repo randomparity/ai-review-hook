@@ -1,0 +1,8 @@
+-   id: ai-review
+    name: AI Code Review
+    description: "An AI-powered pre-commit hook that reviews your code."
+    entry: ai-review
+    language: python
+    language_version: python3
+    types: [text]
+    require_serial: true
