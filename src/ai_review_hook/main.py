@@ -21,14 +21,45 @@ DEFAULT_TEMPERATURE = 0.1
 
 # Secret detection patterns
 SECRET_PATTERNS = [
+    # AWS credentials
     re.compile(r"AKIA[0-9A-Z]{16}"),  # AWS Access Key ID
     re.compile(
         r"(?i)aws_secret_access_key\s*=\s*[A-Za-z0-9/+=]{40}"
     ),  # AWS Secret Access Key
+    # Private keys and certificates
     re.compile(
-        r"-----BEGIN (?:RSA|EC|DSA) PRIVATE KEY-----.*?-----END (?:RSA|EC|DSA) PRIVATE KEY-----",
+        r"-----BEGIN (?:RSA|EC|DSA|OPENSSH|PGP) (?:PRIVATE KEY|CERTIFICATE)-----.*?-----END (?:RSA|EC|DSA|OPENSSH|PGP) (?:PRIVATE KEY|CERTIFICATE)-----",
         re.S,
-    ),  # Private Keys
+    ),  # Private Keys and Certificates
+    # Authorization headers and Bearer tokens
+    re.compile(
+        r"(?i)authorization:\s*bearer\s+[a-z0-9\-._~+/]+=*"
+    ),  # Bearer/JWT tokens in headers
+    re.compile(r"(?i)bearer\s+[a-z0-9\-._~+/]{20,}={0,2}"),  # Generic Bearer tokens
+    # GitHub tokens
+    re.compile(r"gh[pousr]_[A-Za-z0-9]{36,255}"),  # GitHub Personal Access Tokens
+    re.compile(r"gho_[A-Za-z0-9]{36}"),  # GitHub OAuth tokens
+    re.compile(r"ghs_[A-Za-z0-9]{36}"),  # GitHub server-to-server tokens
+    # Generic API keys and tokens
+    re.compile(
+        r'(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*["\']?[A-Za-z0-9_\-.]{16,}["\']?'
+    ),  # Generic API keys and tokens
+    # Slack tokens
+    re.compile(r"xox[baprs]-[A-Za-z0-9\-]+"),  # Slack tokens
+    # OpenAI API keys
+    re.compile(r"sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}"),  # OpenAI API keys
+    # JWT tokens (basic detection)
+    re.compile(
+        r"eyJ[A-Za-z0-9_\-]*\.eyJ[A-Za-z0-9_\-]*\.[A-Za-z0-9_\-]*"
+    ),  # JWT tokens (header.payload.signature)
+    # Database connection strings
+    re.compile(
+        r"(?i)(mongodb|mysql|postgresql|postgres)://[^\s]*:[^\s]*@[^\s]+"
+    ),  # Database connection strings with credentials
+    # Generic secrets in environment or config format
+    re.compile(
+        r'(?i)(secret|password|key|token)\s*=\s*["\'][A-Za-z0-9+/]{20,}["\']'
+    ),  # Environment file style secrets
 ]
 
 
@@ -114,17 +145,41 @@ class AIReviewer:
             except subprocess.CalledProcessError:
                 return ""
 
+    def is_binary_file(self, filename: str) -> bool:
+        """Check if a file is likely binary using heuristics."""
+        try:
+            with open(filename, "rb") as f:
+                # Read first 8192 bytes to check for binary content
+                chunk = f.read(8192)
+                if not chunk:
+                    return False
+                # Check for null bytes (common in binary files)
+                if b"\x00" in chunk:
+                    return True
+                # Check for high ratio of non-text bytes
+                text_chars = sum(1 for b in chunk if 32 <= b <= 126 or b in [9, 10, 13])
+                return (text_chars / len(chunk)) < 0.75
+        except (IOError, OSError):
+            # If we can't read the file, assume it might be binary
+            return True
+
     def get_file_content(self, filename: str) -> str:
-        """Read the current content of a file."""
+        """Read the current content of a file, skipping binary files for security."""
+        # Check if file is binary first
+        if self.is_binary_file(filename):
+            return "[BINARY FILE - Content not shown for security]"
+
         try:
             with open(filename, "r", encoding="utf-8") as f:
                 return f.read()
         except (IOError, UnicodeDecodeError) as e:
-            return f"Error reading file: {e}"
+            return f"[UNREADABLE FILE - {e}]"
 
-    def create_review_prompt(self, filename: str, diff: str, content: str) -> str:
+    def create_review_prompt(
+        self, filename: str, diff: str, content: str, diff_only: bool = False
+    ) -> str:
         """Create the AI review prompt."""
-        return f"""Please perform a thorough code review of the following changes.
+        prompt = f"""Please perform a thorough code review of the following changes.
 
 IMPORTANT: Your first line of response must be either `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.
 
@@ -134,12 +189,22 @@ Git Diff:
 ```
 {diff}
 ```
+"""
 
+        # Only include file content if not in diff-only mode and content is meaningful
+        if not diff_only and content and not content.startswith("["):
+            prompt += f"""
 Current File Content:
 ```
 {content}
 ```
+"""
+        elif diff_only:
+            prompt += """
+Note: Only diff is provided for security (--diff-only mode).
+"""
 
+        prompt += """
 Review the code for the following:
 1.  **Code Quality & Best Practices**: Adherence to coding standards, clarity, and maintainability.
 2.  **Potential Bugs & Logical Errors**: Flaws that could lead to incorrect behavior.
@@ -151,6 +216,7 @@ Review the code for the following:
 
 Provide specific, actionable feedback with line numbers where possible. If no significant issues are found, briefly explain why the code is approved.
 """
+        return prompt
 
     def review_file(
         self,
@@ -199,7 +265,9 @@ Provide specific, actionable feedback with line numbers where possible. If no si
         redacted_diff = redact(diff)
         redacted_content = redact(content) if content else ""
 
-        prompt = self.create_review_prompt(filename, redacted_diff, redacted_content)
+        prompt = self.create_review_prompt(
+            filename, redacted_diff, redacted_content, diff_only
+        )
 
         try:
             response = self.client.chat.completions.create(
@@ -312,6 +380,11 @@ def main() -> int:
         help=f"AI response temperature 0.0-2.0 (default: {DEFAULT_TEMPERATURE})",
     )
     parser.add_argument(
+        "--allow-unsafe-base-url",
+        action="store_true",
+        help="Allow using custom base URLs other than official OpenAI endpoints",
+    )
+    parser.add_argument(
         "--output-file",
         help="File to save the complete review output.",
     )
@@ -323,10 +396,21 @@ def main() -> int:
         format="%(levelname)s: %(message)s",
     )
 
-    if args.base_url and not args.base_url.startswith("https://api.openai.com"):
-        logging.warning(
-            f"Using a custom base URL: {args.base_url}. Ensure it is trusted."
-        )
+    # Validate base URL for security
+    if args.base_url:
+        if not args.base_url.startswith("https://api.openai.com"):
+            if not args.allow_unsafe_base_url:
+                logging.error(
+                    f"Custom base URL '{args.base_url}' is not allowed for security reasons."
+                )
+                logging.error(
+                    "If you trust this endpoint, use --allow-unsafe-base-url flag."
+                )
+                return 1
+            else:
+                logging.warning(
+                    f"Using custom base URL: {args.base_url}. Code will be sent to this endpoint."
+                )
     api_key = os.getenv(args.api_key_env)
     if not api_key:
         logging.error(f"API key not found in environment variable '{args.api_key_env}'")
