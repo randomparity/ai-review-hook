@@ -7,11 +7,11 @@ using the OpenAI API with configurable models and endpoints.
 """
 
 import argparse
-import os
-import sys
-import subprocess
-import re
 import logging
+import os
+import re
+import subprocess
+import sys
 from typing import Tuple
 
 # Secret detection patterns
@@ -299,7 +299,7 @@ def main() -> int:
         # This is a synchronous operation. For a large number of files, consider
         # parallelizing this process using concurrent.futures or similar libraries.
         passed, review = reviewer.review_file(filename, args.context_lines)
-        all_reviews.append(f"\n{'='*60}\nFile: {filename}\\n{'='*60}\\n{review}")
+        all_reviews.append(f"\n{'=' * 60}\nFile: {filename}\\n{'=' * 60}\\n{review}")
 
         if not passed:
             failed_files.append(filename)
@@ -323,20 +323,20 @@ def main() -> int:
 
     # Summary
     if failed_files:
-        logging.warning(f"\n{'='*60}")
+        logging.warning(f"\n{'=' * 60}")
         logging.warning(f"AI REVIEW FAILED for {len(failed_files)} file(s):")
         for filename in failed_files:
             logging.warning(f"  - {filename}")
         if output_file:
             logging.warning(f"Review details saved to: {output_file}")
-        logging.warning(f"{'='*60}")
+        logging.warning(f"{'=' * 60}")
         return 1
     else:
-        logging.info(f"\n{'='*60}")
+        logging.info(f"\n{'=' * 60}")
         logging.info(f"AI REVIEW PASSED for all {len(args.files)} file(s)")
         if output_file:
             logging.info(f"Review details saved to: {output_file}")
-        logging.info(f"{'='*60}")
+        logging.info(f"{'=' * 60}")
         return 0
 
 
