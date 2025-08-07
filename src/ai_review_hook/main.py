@@ -21,7 +21,7 @@ SECRET_PATTERNS = [
         r"(?i)aws_secret_access_key\s*=\s*[A-Za-z0-9/+=]{40}"
     ),  # AWS Secret Access Key
     re.compile(
-        r"-----BEGIN (?:RSA|EC|DSA) PRIVATE KEY-----.*?-----END \\1 PRIVATE KEY-----",
+        r"-----BEGIN (?:RSA|EC|DSA) PRIVATE KEY-----.*?-----END (?:RSA|EC|DSA) PRIVATE KEY-----",
         re.S,
     ),  # Private Keys
 ]
