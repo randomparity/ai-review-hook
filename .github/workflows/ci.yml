@@ -19,5 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements-dev.txt
-      - name: Run pre-commit hooks
-        uses: pre-commit/action@v3.0.1
+      - name: Run pytest
+        run: |
+          pip install -r requirements-dev.txt
+          pytest
