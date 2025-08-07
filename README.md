@@ -32,7 +32,6 @@ This project provides a pre-commit hook for AI-assisted code reviews using the O
     pre-commit run ai-review --all-files
     ```
 
-For more detailed usage instructions, including pre-push setup and command-line options, please see the [Usage Guide](USAGE.md).
 
 ## Features
 

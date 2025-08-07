@@ -141,18 +141,20 @@ Review the code for the following:
 Provide specific, actionable feedback with line numbers where possible. If no significant issues are found, briefly explain why the code is approved.
 """
 
-    def review_file(self, filename: str, context_lines: int = 3) -> Tuple[bool, str]:
+    def review_file(
+        self, filename: str, diff: str, context_lines: int = 3
+    ) -> Tuple[bool, str]:
         """
         Review a single file using AI.
 
         Args:
             filename: Path to the file to review
+            diff: The git diff of the file
             context_lines: Number of context lines to include in git diff
 
         Returns:
             Tuple of (passed, review_message)
         """
-        diff = self.get_file_diff(filename, context_lines)
         if not diff.strip():
             return True, f"No changes detected in {filename}"
 
@@ -298,14 +300,26 @@ def main() -> int:
 
         # This is a synchronous operation. For a large number of files, consider
         # parallelizing this process using concurrent.futures or similar libraries.
-        passed, review = reviewer.review_file(filename, args.context_lines)
-        all_reviews.append(f"\n{'=' * 60}\nFile: {filename}\\n{'=' * 60}\\n{review}")
+        diff = reviewer.get_file_diff(filename, args.context_lines)
+        passed, review = reviewer.review_file(
+            filename, diff=diff, context_lines=args.context_lines
+        )
 
-        if not passed:
-            failed_files.append(filename)
+        review_log_entry = f"""
 
-    for review in all_reviews:
-        print(review)
+{"=" * 60}
+File: {filename}
+{"=" * 60}
+
+"""
+        if args.verbose:
+            review_log_entry += f"""Git Diff:
+```
+{diff}```
+
+"""
+        review_log_entry += review
+        all_reviews.append(review_log_entry)
 
     # Save review to file if requested
     output_file = args.output_file

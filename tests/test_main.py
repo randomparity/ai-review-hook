@@ -35,7 +35,7 @@ def test_review_file_pass(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review = reviewer.review_file("test.py")
+        passed, review = reviewer.review_file("test.py", diff="- some changes")
         assert passed is True
         assert "AI-REVIEW:[PASS]" in review
 
@@ -49,6 +49,6 @@ def test_review_file_fail(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review = reviewer.review_file("test.py")
+        passed, review = reviewer.review_file("test.py", diff="- some changes")
         assert passed is False
         assert "AI-REVIEW:[FAIL]" in review
