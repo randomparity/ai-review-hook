@@ -25,7 +25,7 @@ This project provides a pre-commit hook for AI-assisted code reviews using the O
           additional_dependencies: ['openai>=1.0.0', 'requests']
           args:
             - "--model"
-            - "openai/horizon-beta"
+            - "qwen/qwen3-coder"
             - "--verbose"
             - "--context-lines"
             - "5"
