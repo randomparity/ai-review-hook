@@ -10,9 +10,11 @@ import argparse
 import concurrent.futures
 import logging
 import os
+import random
 import re
 import subprocess
 import sys
+import time
 from typing import Optional, Tuple
 
 # Constants
@@ -99,6 +101,10 @@ class AIReviewer:
         timeout: int = 30,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         temperature: float = DEFAULT_TEMPERATURE,
+        max_retries: int = 3,
+        initial_retry_delay: float = 1.0,
+        max_retry_delay: float = 60.0,
+        retry_jitter: float = 0.1,
     ):
         """
         Initialize the AI reviewer.
@@ -110,10 +116,18 @@ class AIReviewer:
             timeout: Timeout for API requests in seconds
             max_tokens: Maximum tokens in AI response
             temperature: AI response temperature (0.0-2.0)
+            max_retries: Maximum number of retries for failed API calls
+            initial_retry_delay: Initial delay between retries in seconds
+            max_retry_delay: Maximum delay between retries in seconds
+            retry_jitter: Jitter factor for retry delays (0.0-1.0)
         """
         self.model = model
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.max_retries = max_retries
+        self.initial_retry_delay = initial_retry_delay
+        self.max_retry_delay = max_retry_delay
+        self.retry_jitter = retry_jitter
         self.client = openai.OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
 
     def get_file_diff(self, filename: str, context_lines: int = 3) -> str:
@@ -310,6 +324,87 @@ Provide specific, actionable feedback with line numbers where possible. If no si
 
         return result
 
+    def _is_retryable_error(self, error: Exception) -> bool:
+        """Determine if an error is retryable (rate limits, transient network issues)."""
+        if isinstance(error, openai.RateLimitError):
+            return True
+        if isinstance(error, openai.APITimeoutError):
+            return True
+        if isinstance(error, openai.APIConnectionError):
+            return True
+        if isinstance(error, openai.InternalServerError):
+            return True
+        if isinstance(error, openai.UnprocessableEntityError):
+            # Sometimes temporary due to model overload
+            return True
+
+        # Check for specific HTTP status codes that might be retryable
+        if hasattr(error, "status_code"):
+            retryable_codes = {429, 502, 503, 504, 520, 521, 522, 523, 524}
+            return error.status_code in retryable_codes
+
+        return False
+
+    def _calculate_retry_delay(self, attempt: int) -> float:
+        """Calculate delay for retry attempt with exponential backoff and jitter."""
+        # Exponential backoff: delay = initial_delay * (2 ^ attempt)
+        base_delay = self.initial_retry_delay * (2**attempt)
+
+        # Cap at max delay
+        base_delay = min(base_delay, self.max_retry_delay)
+
+        # Add jitter to prevent thundering herd
+        jitter = base_delay * self.retry_jitter * random.random()
+
+        return base_delay + jitter
+
+    def _make_api_call_with_retry(self, messages: list, filename: str) -> str:
+        """Make an API call with retry logic for rate limits and transient errors."""
+        last_error = None
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                logging.debug(f"API call attempt {attempt + 1} for {filename}")
+
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    max_tokens=self.max_tokens,
+                    temperature=self.temperature,
+                )
+
+                return response.choices[0].message.content
+
+            except Exception as e:
+                last_error = e
+
+                # Check if this is the last attempt
+                if attempt >= self.max_retries:
+                    break
+
+                # Check if error is retryable
+                if not self._is_retryable_error(e):
+                    logging.debug(f"Non-retryable error for {filename}: {e}")
+                    break
+
+                # Calculate delay and wait
+                delay = self._calculate_retry_delay(attempt)
+
+                # Log retry attempt with appropriate level based on error type
+                if isinstance(e, openai.RateLimitError):
+                    logging.info(
+                        f"Rate limit hit for {filename}, retrying in {delay:.2f}s (attempt {attempt + 1}/{self.max_retries + 1})"
+                    )
+                else:
+                    logging.warning(
+                        f"Transient error for {filename}: {e}. Retrying in {delay:.2f}s (attempt {attempt + 1}/{self.max_retries + 1})"
+                    )
+
+                time.sleep(delay)
+
+        # If we get here, all retries failed
+        raise last_error
+
     def review_file(
         self,
         filename: str,
@@ -369,20 +464,16 @@ Provide specific, actionable feedback with line numbers where possible. If no si
         )
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert code reviewer. Provide thorough, constructive feedback on code changes.",
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-            )
+            # Use retry mechanism for API calls
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are an expert code reviewer. Provide thorough, constructive feedback on code changes.",
+                },
+                {"role": "user", "content": prompt},
+            ]
 
-            review_text = response.choices[0].message.content
+            review_text = self._make_api_call_with_retry(messages, filename)
 
             # Guard against empty review_text
             if not review_text or not review_text.strip():
@@ -494,6 +585,30 @@ def main() -> int:
         "--output-file",
         help="File to save the complete review output.",
     )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=3,
+        help="Maximum number of retries for failed API calls (default: 3)",
+    )
+    parser.add_argument(
+        "--initial-retry-delay",
+        type=float,
+        default=1.0,
+        help="Initial delay between retries in seconds (default: 1.0)",
+    )
+    parser.add_argument(
+        "--max-retry-delay",
+        type=float,
+        default=60.0,
+        help="Maximum delay between retries in seconds (default: 60.0)",
+    )
+    parser.add_argument(
+        "--retry-jitter",
+        type=float,
+        default=0.1,
+        help="Jitter factor for retry delays 0.0-1.0 (default: 0.1)",
+    )
 
     args = parser.parse_args()
 
@@ -538,6 +653,10 @@ def main() -> int:
             timeout=args.timeout,
             max_tokens=args.max_tokens,
             temperature=args.temperature,
+            max_retries=args.max_retries,
+            initial_retry_delay=args.initial_retry_delay,
+            max_retry_delay=args.max_retry_delay,
+            retry_jitter=args.retry_jitter,
         )
     except Exception as e:
         logging.error(f"Error initializing AI reviewer: {e}")
