@@ -14,6 +14,30 @@ This project provides a pre-commit hook for AI-assisted code reviews using the O
         -   id: ai-review
     ```
 
+    Or a real-world example:
+
+    ```yaml
+    - repo: https://github.com/randomparity/ai-review-hook
+      rev: v0.1.1
+      hooks:
+        - id: ai-review
+          name: AI Code Review
+          additional_dependencies: ['openai>=1.0.0', 'requests']
+          args:
+            - "--model"
+            - "openai/horizon-beta"
+            - "--verbose"
+            - "--context-lines"
+            - "5"
+            - "--output-file"
+            - "ai-review.log"
+            - "--allow-unsafe-base-url"
+            - "--base-url"
+            - "https://openrouter.ai/api/v1"
+            - "--api-key-env"
+            - "OPENROUTER_API_KEY"
+    ```
+
 2.  **Set your OpenAI API key**:
 
     ```bash
