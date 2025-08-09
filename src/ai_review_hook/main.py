@@ -15,7 +15,7 @@ import re
 import subprocess
 import sys
 import time
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 # Constants
 DEFAULT_MODEL = "gpt-4o-mini"
@@ -64,6 +64,67 @@ SECRET_PATTERNS = [
         r'(?i)(secret|password|key|token)\s*=\s*["\'][A-Za-z0-9+/]{20,}["\']'
     ),  # Environment file style secrets
 ]
+
+
+def should_review_file(
+    filename: str, include_patterns: List[str], exclude_patterns: List[str]
+) -> bool:
+    """Check if a file should be reviewed based on include/exclude patterns.
+
+    Args:
+        filename: Path to the file to check
+        include_patterns: List of file patterns to include (e.g., ['*.py', '*.js'])
+        exclude_patterns: List of file patterns to exclude (e.g., ['*.test.py', '*.spec.js'])
+
+    Returns:
+        True if file should be reviewed, False otherwise
+
+    Logic:
+    - If include_patterns is empty, all files are included by default
+    - If include_patterns is provided, file must match at least one include pattern
+    - If exclude_patterns is provided and file matches any exclude pattern, it's excluded
+    - Exclude patterns take precedence over include patterns
+    """
+    import fnmatch
+    import os
+
+    # Get the basename for pattern matching
+    basename = os.path.basename(filename)
+
+    # Check exclude patterns first (they take precedence)
+    if exclude_patterns:
+        for pattern in exclude_patterns:
+            if fnmatch.fnmatch(filename, pattern) or fnmatch.fnmatch(basename, pattern):
+                return False
+
+    # If no include patterns specified, include all files (unless excluded)
+    if not include_patterns:
+        return True
+
+    # Check if file matches any include pattern
+    for pattern in include_patterns:
+        if fnmatch.fnmatch(filename, pattern) or fnmatch.fnmatch(basename, pattern):
+            return True
+
+    # File doesn't match any include pattern
+    return False
+
+
+def parse_file_patterns(pattern_list: List[str]) -> List[str]:
+    """Parse file patterns from command line arguments.
+
+    Handles comma-separated values and individual arguments.
+    Example: ['*.py,*.js', '*.go'] becomes ['*.py', '*.js', '*.go']
+    """
+    if not pattern_list:
+        return []
+
+    patterns = []
+    for item in pattern_list:
+        # Split on comma and strip whitespace
+        patterns.extend([p.strip() for p in item.split(",") if p.strip()])
+
+    return patterns
 
 
 def redact(text: str, skip_if_empty: bool = False) -> str:
@@ -609,6 +670,16 @@ def main() -> int:
         default=0.1,
         help="Jitter factor for retry delays 0.0-1.0 (default: 0.1)",
     )
+    parser.add_argument(
+        "--include-files",
+        action="append",
+        help="File patterns to include for review (e.g., '*.py' or '*.py,*.js'). Can be specified multiple times. If not specified, all files are included by default.",
+    )
+    parser.add_argument(
+        "--exclude-files",
+        action="append",
+        help="File patterns to exclude from review (e.g., '*.test.py' or '*.test.*,*.spec.*'). Can be specified multiple times. Exclude patterns take precedence over include patterns.",
+    )
 
     args = parser.parse_args()
 
@@ -642,6 +713,40 @@ def main() -> int:
 
     if not args.files:
         logging.info("No files to review")
+        return 0
+
+    # Parse file filtering patterns
+    include_patterns = parse_file_patterns(args.include_files or [])
+    exclude_patterns = parse_file_patterns(args.exclude_files or [])
+
+    # Filter files based on include/exclude patterns
+    original_file_count = len(args.files)
+    filtered_files = []
+    skipped_files = []
+
+    for filename in args.files:
+        if should_review_file(filename, include_patterns, exclude_patterns):
+            filtered_files.append(filename)
+        else:
+            skipped_files.append(filename)
+
+    # Log filtering results
+    if include_patterns or exclude_patterns:
+        logging.info(
+            f"File filtering: {len(filtered_files)}/{original_file_count} files selected for review"
+        )
+        if include_patterns:
+            logging.info(f"Include patterns: {', '.join(include_patterns)}")
+        if exclude_patterns:
+            logging.info(f"Exclude patterns: {', '.join(exclude_patterns)}")
+        if skipped_files and args.verbose:
+            logging.info(f"Skipped files: {', '.join(skipped_files)}")
+
+    # Update the files list to only include filtered files
+    args.files = filtered_files
+
+    if not args.files:
+        logging.info("No files match the filtering criteria")
         return 0
 
     # Initialize AI reviewer

@@ -85,6 +85,8 @@ This project provides a pre-commit hook for AI-assisted code reviews using the O
 *   `--jobs`, `-j`: Number of parallel jobs for reviewing multiple files (default: 1)
 *   `--allow-unsafe-base-url`: Allow custom base URLs other than official OpenAI endpoints
 *   `--output-file`: File to save the complete review output
+*   `--include-files`: File patterns to include for review (e.g., '*.py' or '*.py,*.js'). Can be specified multiple times. If not specified, all files are included by default.
+*   `--exclude-files`: File patterns to exclude from review (e.g., '*.test.py' or '*.test.*,*.spec.*'). Can be specified multiple times. Exclude patterns take precedence over include patterns.
 *   `-v`, `--verbose`: Enable verbose logging
 
 ## Security Features
@@ -140,7 +142,67 @@ The AI Review Hook includes several performance optimizations for efficient code
 *   **Binary Skip**: Fast binary file detection prevents unnecessary processing
 *   **Efficient Memory**: Streams large files without loading entire content into memory
 
+## File Type Filtering
+
+The AI Review Hook supports filtering files by type to optimize review focus and reduce API costs:
+
+### Include/Exclude Patterns
+*   **Include Patterns**: Use `--include-files` to specify which file types to review
+*   **Exclude Patterns**: Use `--exclude-files` to specify which file types to skip
+*   **Pattern Syntax**: Supports standard glob patterns (`*.py`, `src/*.js`, `**/*.test.*`)
+*   **Multiple Patterns**: Can specify multiple patterns using comma separation or multiple flags
+*   **Precedence**: Exclude patterns take precedence over include patterns
+
 ### Usage Examples
+
+**File Type Filtering:**
+```bash
+# Review only Python files
+pre-commit run ai-review --all-files -- --include-files "*.py"
+
+# Review Python and JavaScript files, but exclude tests
+pre-commit run ai-review --all-files -- --include-files "*.py,*.js" --exclude-files "*.test.*,*.spec.*"
+
+# Review files from specific directories only
+pre-commit run ai-review --all-files -- --include-files "src/*.py,lib/*.py"
+
+# Exclude common non-reviewable files
+pre-commit run ai-review --all-files -- --exclude-files "*.min.*,*.generated.*,vendor/**"
+
+# Multiple include/exclude patterns
+pre-commit run ai-review --all-files -- \
+  --include-files "*.py" \
+  --include-files "*.js,*.ts" \
+  --exclude-files "*.test.py" \
+  --exclude-files "*.spec.js,*.min.js"
+```
+
+**Common Filter Patterns:**
+```bash
+# Python projects: exclude tests and build files
+--include-files "*.py" --exclude-files "test_*,*_test.py,build/**,dist/**"
+
+# Web projects: include source files, exclude build artifacts
+--include-files "*.js,*.ts,*.jsx,*.tsx,*.css,*.scss" --exclude-files "*.min.*,dist/**,node_modules/**"
+
+# Multi-language projects: focus on core languages
+--include-files "*.py,*.js,*.go,*.rs,*.java" --exclude-files "vendor/**,third_party/**,*.test.*"
+```
+
+**Configuration in .pre-commit-config.yaml:**
+```yaml
+- repo: https://github.com/randomparity/ai-review-hook
+  rev: v1.0.0
+  hooks:
+    - id: ai-review
+      name: AI Code Review - Python Only
+      args:
+        - "--include-files"
+        - "*.py"
+        - "--exclude-files"
+        - "test_*,*_test.py"
+        - "--verbose"
+```
 
 **Parallel Processing:**
 ```bash
