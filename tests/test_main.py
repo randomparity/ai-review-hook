@@ -651,3 +651,124 @@ def test_retry_configuration_parameters(mock_openai):
     delay = reviewer._calculate_retry_delay(1)
     # Should be around 4.0 (2.0 * 2^1) with up to 20% jitter
     assert 3.2 <= delay <= 4.8
+
+
+def test_file_filtering_integration():
+    """Test file filtering integration with main function."""
+    from src.ai_review_hook.main import parse_file_patterns, should_review_file
+
+    # Test parse_file_patterns function
+    assert parse_file_patterns(["*.py,*.js", "*.go"]) == ["*.py", "*.js", "*.go"]
+    assert parse_file_patterns(["*.py, *.js"]) == ["*.py", "*.js"]
+    assert parse_file_patterns([]) == []
+
+    # Test should_review_file function
+    assert should_review_file("test.py", ["*.py"], [])
+    assert not should_review_file("test.py", ["*.js"], [])
+    assert not should_review_file("test.py", ["*.py"], ["*.py"])
+    assert should_review_file("test.py", [], [])
+
+
+def test_command_line_file_filtering():
+    """Test that command line arguments for file filtering are parsed correctly."""
+    from src.ai_review_hook.main import main
+    import sys
+    from unittest.mock import patch
+
+    # Test argument parsing
+    test_args = [
+        "ai-review",
+        "--include-files",
+        "*.py",
+        "--include-files",
+        "*.js,*.ts",
+        "--exclude-files",
+        "*.test.py",
+        "--exclude-files",
+        "*.spec.*,*.min.*",
+        "--verbose",
+        "file1.py",
+        "file2.js",
+        "file3.test.py",
+        "file4.min.js",
+    ]
+
+    with patch.object(sys, "argv", test_args):
+        with patch("os.getenv", return_value="fake-api-key"):
+            with patch("src.ai_review_hook.main.AIReviewer") as mock_reviewer_class:
+                # Mock the reviewer instance
+                mock_reviewer = MagicMock()
+                mock_reviewer.get_file_diff.return_value = "- sample diff"
+                mock_reviewer.review_file.return_value = (
+                    True,
+                    "AI-REVIEW:[PASS] Good code",
+                )
+                mock_reviewer_class.return_value = mock_reviewer
+
+                # Mock logging to capture filter messages
+                with patch("logging.info") as mock_log:
+                    result = main()
+
+                    # Should succeed (exit code 0)
+                    assert result == 0
+
+                    # Verify filtering was applied - check log calls
+                    log_calls = [call[0][0] for call in mock_log.call_args_list]
+                    filter_logs = [log for log in log_calls if "File filtering:" in log]
+                    assert len(filter_logs) > 0
+
+                    # Should have reviewed file1.py and file2.js, skipped test and min files
+                    review_calls = mock_reviewer.review_file.call_args_list
+                    # Should be called exactly twice (for file1.py and file2.js)
+                    assert len(review_calls) == 2
+
+
+def test_file_filtering_no_matches():
+    """Test behavior when no files match filtering criteria."""
+    from src.ai_review_hook.main import main
+    import sys
+    from unittest.mock import patch
+
+    test_args = [
+        "ai-review",
+        "--include-files",
+        "*.py",
+        "--verbose",
+        "file1.js",
+        "file2.css",  # No .py files
+    ]
+
+    with patch.object(sys, "argv", test_args):
+        with patch("os.getenv", return_value="fake-api-key"):
+            with patch("logging.info") as mock_log:
+                result = main()
+
+                # Should exit with code 0 (no files to review is not an error)
+                assert result == 0
+
+                # Should log that no files match criteria
+                log_calls = [call[0][0] for call in mock_log.call_args_list]
+                no_match_logs = [log for log in log_calls if "No files match" in log]
+                assert len(no_match_logs) > 0
+
+
+def test_file_filtering_edge_cases():
+    """Test edge cases for file filtering."""
+    from src.ai_review_hook.main import should_review_file
+
+    # Test with empty filename
+    assert should_review_file("", [], [])
+
+    # Test with None patterns
+    assert should_review_file("test.py", [], [])
+
+    # Test with complex path patterns
+    assert should_review_file("src/deep/nested/file.py", ["**/*.py"], [])
+    assert should_review_file("src/deep/nested/file.py", ["src/**/*.py"], [])
+    assert not should_review_file("other/deep/nested/file.py", ["src/**/*.py"], [])
+
+    # Test with overlapping patterns
+    include = ["*.py", "src/*.py"]
+    exclude = ["test_*.py", "**/test_*"]
+    assert should_review_file("src/main.py", include, exclude)
+    assert not should_review_file("src/test_main.py", include, exclude)
