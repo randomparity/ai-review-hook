@@ -8,14 +8,16 @@ using the OpenAI API with configurable models and endpoints.
 
 import argparse
 import concurrent.futures
+import json
 import logging
 import os
+from pathlib import Path
 import random
 import re
 import subprocess
 import sys
 import time
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # Constants
 DEFAULT_MODEL = "gpt-4o-mini"
@@ -127,6 +129,79 @@ def parse_file_patterns(pattern_list: List[str]) -> List[str]:
     return patterns
 
 
+def load_filetype_prompts(prompts_file: Optional[str]) -> Dict[str, str]:
+    """Load filetype-specific prompts from JSON file.
+
+    Args:
+        prompts_file: Path to JSON file containing filetype-specific prompts
+
+    Returns:
+        Dictionary mapping file extensions to custom prompt templates
+    """
+    if not prompts_file:
+        return {}
+
+    try:
+        if not Path(prompts_file).exists():
+            logging.warning(f"Filetype prompts file not found: {prompts_file}")
+            return {}
+
+        with open(prompts_file, "r", encoding="utf-8") as f:
+            prompts_data = json.load(f)
+
+        # Validate structure
+        if not isinstance(prompts_data, dict):
+            logging.error(f"Invalid filetype prompts file format: {prompts_file}")
+            return {}
+
+        # Normalize extensions (ensure they start with .)
+        normalized_prompts = {}
+        for ext, prompt in prompts_data.items():
+            if not isinstance(prompt, str):
+                logging.warning(f"Skipping non-string prompt for extension '{ext}'")
+                continue
+
+            # Normalize extension
+            if not ext.startswith("."):
+                ext = f".{ext}"
+            normalized_prompts[ext.lower()] = prompt
+
+        logging.info(
+            f"Loaded {len(normalized_prompts)} filetype-specific prompts from {prompts_file}"
+        )
+        return normalized_prompts
+
+    except (json.JSONDecodeError, IOError) as e:
+        logging.error(f"Error loading filetype prompts from {prompts_file}: {e}")
+        return {}
+
+
+def get_file_extension(filename: str) -> str:
+    """Get the normalized file extension from a filename.
+
+    Args:
+        filename: Path to the file
+
+    Returns:
+        Normalized file extension (lowercase, with leading dot)
+    """
+    return Path(filename).suffix.lower()
+
+
+def select_prompt_template(
+    filename: str, filetype_prompts: Dict[str, str]
+) -> Optional[str]:
+    """Select the appropriate prompt template for a file.
+
+    Args:
+        filename: Path to the file
+        filetype_prompts: Dictionary of filetype-specific prompts
+
+    Returns:
+        Custom prompt template if found, None for default prompt
+    """
+    extension = get_file_extension(filename)
+    return filetype_prompts.get(extension)
 def redact(text: str, skip_if_empty: bool = False) -> str:
     """Redact secrets from a string using predefined patterns.
 
@@ -166,6 +241,7 @@ class AIReviewer:
         initial_retry_delay: float = 1.0,
         max_retry_delay: float = 60.0,
         retry_jitter: float = 0.1,
+        filetype_prompts: Optional[Dict[str, str]] = None,
     ):
         """
         Initialize the AI reviewer.
@@ -181,6 +257,7 @@ class AIReviewer:
             initial_retry_delay: Initial delay between retries in seconds
             max_retry_delay: Maximum delay between retries in seconds
             retry_jitter: Jitter factor for retry delays (0.0-1.0)
+            filetype_prompts: Dictionary mapping file extensions to custom prompts
         """
         self.model = model
         self.max_tokens = max_tokens
@@ -189,6 +266,7 @@ class AIReviewer:
         self.initial_retry_delay = initial_retry_delay
         self.max_retry_delay = max_retry_delay
         self.retry_jitter = retry_jitter
+        self.filetype_prompts = filetype_prompts or {}
         self.client = openai.OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
 
     def get_file_diff(self, filename: str, context_lines: int = 3) -> str:
@@ -262,7 +340,28 @@ class AIReviewer:
     def create_review_prompt(
         self, filename: str, diff: str, content: str, diff_only: bool = False
     ) -> str:
-        """Create the AI review prompt."""
+        """Create the AI review prompt, using filetype-specific prompts if available."""
+        # Check for filetype-specific prompt template
+        custom_prompt = select_prompt_template(filename, self.filetype_prompts)
+
+        if custom_prompt:
+            # Use the custom prompt template, replacing placeholders
+            prompt = custom_prompt.format(
+                filename=filename,
+                diff=diff,
+                content=content
+                if not diff_only and content and not content.startswith("[")
+                else "",
+                diff_only_note="Note: Only diff is provided for security (--diff-only mode)."
+                if diff_only
+                else "",
+            )
+            logging.debug(
+                f"Using filetype-specific prompt for {filename} ({get_file_extension(filename)})"
+            )
+            return prompt
+
+        # Fall back to default prompt
         prompt = f"""Please perform a thorough code review of the following changes.
 
 IMPORTANT: Your first line of response must be either `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.
@@ -680,6 +779,10 @@ def main() -> int:
         action="append",
         help="File patterns to exclude from review (e.g., '*.test.py' or '*.test.*,*.spec.*'). Can be specified multiple times. Exclude patterns take precedence over include patterns.",
     )
+    parser.add_argument(
+        "--filetype-prompts",
+        help='Path to JSON file containing filetype-specific prompts. File should map extensions to custom prompt templates (e.g., {".py": "Review this Python code...", ".md": "Review this documentation..."})',
+    )
 
     args = parser.parse_args()
 
@@ -749,6 +852,8 @@ def main() -> int:
         logging.info("No files match the filtering criteria")
         return 0
 
+    # Load filetype-specific prompts if provided
+    filetype_prompts = load_filetype_prompts(args.filetype_prompts)
     # Initialize AI reviewer
     try:
         reviewer = AIReviewer(
@@ -762,6 +867,7 @@ def main() -> int:
             initial_retry_delay=args.initial_retry_delay,
             max_retry_delay=args.max_retry_delay,
             retry_jitter=args.retry_jitter,
+            filetype_prompts=filetype_prompts,
         )
     except Exception as e:
         logging.error(f"Error initializing AI reviewer: {e}")
