@@ -33,8 +33,8 @@ class TestFiletypePrompts:
         assert get_file_extension("archive.tar.gz") == ".gz"
 
     def test_select_prompt_template_found(self):
-        """Test selecting prompt template when extension exists."""
-        prompts = {".py": "Python prompt", ".js": "JavaScript prompt"}
+        """Test selecting prompt template when pattern exists."""
+        prompts = {"*.py": "Python prompt", "*.js": "JavaScript prompt"}
 
         result = select_prompt_template("script.py", prompts)
         assert result == "Python prompt"
@@ -53,18 +53,23 @@ class TestFiletypePrompts:
         assert result is None
 
     def test_select_prompt_template_case_insensitive(self):
-        """Test prompt selection is case insensitive for extensions."""
-        prompts = {".py": "Python prompt"}
+        """Test prompt selection with case variations."""
+        # Case sensitive patterns
+        prompts = {"*.py": "Python prompt"}
 
-        result = select_prompt_template("Script.PY", prompts)
+        result = select_prompt_template("Script.py", prompts)
         assert result == "Python prompt"
+
+        # Case sensitive pattern matching
+        result = select_prompt_template("Script.PY", prompts)
+        assert result is None  # fnmatch is case-sensitive
 
     def test_load_filetype_prompts_valid_file(self):
         """Test loading valid filetype prompts file."""
         prompts_data = {
-            "py": "Review this Python code for PEP8 compliance",
-            ".js": "Review this JavaScript code for modern practices",
-            ".md": "Review this documentation for clarity",
+            "*.py": "Review this Python code for PEP8 compliance",
+            "*.js": "Review this JavaScript code for modern practices",
+            "*.md": "Review this documentation for clarity",
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -74,11 +79,11 @@ class TestFiletypePrompts:
         try:
             result = load_filetype_prompts(temp_path)
 
-            # Should normalize extensions
+            # Should keep patterns as-is (no normalization in new system)
             expected = {
-                ".py": "Review this Python code for PEP8 compliance",
-                ".js": "Review this JavaScript code for modern practices",
-                ".md": "Review this documentation for clarity",
+                "*.py": "Review this Python code for PEP8 compliance",
+                "*.js": "Review this JavaScript code for modern practices",
+                "*.md": "Review this documentation for clarity",
             }
             assert result == expected
         finally:
@@ -127,10 +132,10 @@ class TestFiletypePrompts:
     def test_load_filetype_prompts_non_string_values(self):
         """Test loading prompts with non-string values."""
         prompts_data = {
-            "py": "Valid prompt",
-            "js": 123,  # Invalid non-string
-            "md": None,  # Invalid None
-            "go": "Another valid prompt",
+            "*.py": "Valid prompt",
+            "*.js": 123,  # Invalid non-string
+            "*.md": None,  # Invalid None
+            "*.go": "Another valid prompt",
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -141,8 +146,8 @@ class TestFiletypePrompts:
             with patch("ai_review_hook.main.logging") as mock_logging:
                 result = load_filetype_prompts(temp_path)
 
-                # Should skip invalid values
-                expected = {".py": "Valid prompt", ".go": "Another valid prompt"}
+                # Should skip invalid values (no normalization in new system)
+                expected = {"*.py": "Valid prompt", "*.go": "Another valid prompt"}
                 assert result == expected
                 # Should warn about skipped values
                 assert mock_logging.warning.call_count == 2
@@ -157,9 +162,9 @@ class TestAIReviewerFiletypePrompts:
     def reviewer_with_prompts(self):
         """Create AIReviewer with sample filetype prompts."""
         prompts = {
-            ".py": "IMPORTANT: Your first line must be `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\nReview Python file: {filename}\n\nDiff:\n{diff}\n\nContent:\n{content}\n\nFocus on Python-specific issues like PEP8, imports, and type hints.",
-            ".md": "IMPORTANT: Your first line must be `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\nReview documentation file: {filename}\n\nChanges:\n{diff}\n\n{diff_only_note}\n\nFocus on grammar, clarity, formatting, and completeness.",
-            ".js": "IMPORTANT: Your first line must be `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\nReview JavaScript file: {filename}\n\nDiff: {diff}\nContent: {content}\n\nCheck for modern JS practices, async/await usage, and potential runtime errors.",
+            "*.py": "IMPORTANT: Your first line must be `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\nReview Python file: {filename}\n\nDiff:\n{diff}\n\nContent:\n{content}\n\nFocus on Python-specific issues like PEP8, imports, and type hints.",
+            "*.md": "IMPORTANT: Your first line must be `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\nReview documentation file: {filename}\n\nChanges:\n{diff}\n\n{diff_only_note}\n\nFocus on grammar, clarity, formatting, and completeness.",
+            "*.js": "IMPORTANT: Your first line must be `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\nReview JavaScript file: {filename}\n\nDiff: {diff}\nContent: {content}\n\nCheck for modern JS practices, async/await usage, and potential runtime errors.",
         }
 
         return AIReviewer(api_key="test-key", filetype_prompts=prompts)
@@ -297,8 +302,8 @@ class TestAIReviewerFiletypePrompts:
         """Test end-to-end integration of filetype prompts."""
         # Create a temporary prompts file
         prompts_data = {
-            ".py": "IMPORTANT: Reply with `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\nPython Review for: {filename}\nChanges: {diff}\nCode: {content}\n\nCheck Python conventions.",
-            ".md": "IMPORTANT: Reply with `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\nMarkdown Review: {filename}\nDiff: {diff}\n{diff_only_note}\n\nCheck documentation quality.",
+            "*.py": "IMPORTANT: Reply with `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\nPython Review for: {filename}\nChanges: {diff}\nCode: {content}\n\nCheck Python conventions.",
+            "*.md": "IMPORTANT: Reply with `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\nMarkdown Review: {filename}\nDiff: {diff}\n{diff_only_note}\n\nCheck documentation quality.",
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
