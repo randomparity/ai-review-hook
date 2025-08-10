@@ -87,6 +87,7 @@ This project provides a pre-commit hook for AI-assisted code reviews using the O
 *   `--output-file`: File to save the complete review output
 *   `--include-files`: File patterns to include for review (e.g., '*.py' or '*.py,*.js'). Can be specified multiple times. If not specified, all files are included by default.
 *   `--exclude-files`: File patterns to exclude from review (e.g., '*.test.py' or '*.test.*,*.spec.*'). Can be specified multiple times. Exclude patterns take precedence over include patterns.
+*   `--filetype-prompts`: Path to JSON file containing filetype-specific prompts. File should map extensions to custom prompt templates (e.g., `{".py": "Review this Python code...", ".md": "Review this documentation..."}`)
 *   `-v`, `--verbose`: Enable verbose logging
 
 ## Security Features
@@ -221,6 +222,114 @@ pre-commit run ai-review --all-files -- --max-diff-bytes 5000 --max-content-byte
 # Diff-only mode for large repositories
 pre-commit run ai-review --all-files -- --diff-only
 ```
+
+## Filetype-Specific Prompts
+
+The AI Review Hook supports customized review prompts based on file types, enabling more targeted and relevant feedback for different programming languages and file formats.
+
+### Why Use Filetype-Specific Prompts?
+
+Different file types require different review focus:
+
+*   **Python files** should emphasize PEP 8 compliance, type hints, and import organization
+*   **Documentation files** need grammar, clarity, and formatting checks rather than security reviews
+*   **JavaScript files** should focus on modern syntax, async/await patterns, and browser compatibility
+*   **SQL files** require attention to injection vulnerabilities and query optimization
+*   **Configuration files** need validation of syntax and security considerations
+
+### Configuration
+
+Create a JSON configuration file mapping file extensions to custom prompt templates:
+
+```json
+{
+  ".py": "Review this Python file: {filename}\n\nDiff: {diff}\n\nFocus on PEP 8, type hints, and imports.",
+  ".md": "Review this documentation: {filename}\n\nChanges: {diff}\n\nCheck grammar and clarity.",
+  ".js": "Review this JavaScript: {filename}\n\nDiff: {diff}\n\nCheck modern syntax and security."
+}
+```
+
+Then use the `--filetype-prompts` option:
+
+```bash
+pre-commit run ai-review --all-files -- --filetype-prompts my-prompts.json
+```
+
+### Template Placeholders
+
+Your custom prompts can use these placeholders:
+
+*   `{filename}` - The name of the file being reviewed
+*   `{diff}` - The git diff content for the file
+*   `{content}` - The current file content (empty in `--diff-only` mode)
+*   `{diff_only_note}` - Shows a note when in diff-only mode, empty otherwise
+
+### Example Configuration
+
+The repository includes a comprehensive example at `examples/filetype-prompts.json` with specialized prompts for:
+
+*   **Python** (`.py`) - PEP 8, type hints, imports, docstrings, error handling
+*   **Markdown** (`.md`) - Grammar, formatting, clarity, accessibility
+*   **JavaScript** (`.js`) - Modern syntax, security, performance, browser compatibility
+*   **Go** (`.go`) - Go idioms, concurrency, error handling, testing
+*   **SQL** (`.sql`) - Injection prevention, query optimization, data integrity
+*   **YAML** (`.yaml`) - Configuration validation, security, maintainability
+
+### Usage Examples
+
+**Basic Usage:**
+```bash
+# Use custom prompts for all file types
+pre-commit run ai-review --all-files -- --filetype-prompts examples/filetype-prompts.json
+
+# Combine with file filtering for specific languages
+pre-commit run ai-review --all-files -- \
+  --include-files "*.py,*.js,*.md" \
+  --filetype-prompts examples/filetype-prompts.json
+```
+
+**Pre-commit Configuration:**
+```yaml
+- repo: https://github.com/randomparity/ai-review-hook
+  rev: v1.0.0
+  hooks:
+    - id: ai-review
+      name: AI Code Review with Custom Prompts
+      args:
+        - "--filetype-prompts"
+        - "prompts/review-prompts.json"
+        - "--include-files"
+        - "*.py,*.js,*.md,*.sql"
+        - "--verbose"
+```
+
+**Creating Your Own Prompts:**
+```json
+{
+  ".py": "IMPORTANT: Start with `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\nPython Code Review: {filename}\n\nChanges:\n{diff}\n\nContent:\n{content}\n\n{diff_only_note}\n\nFocus Areas:\n- PEP 8 compliance\n- Type annotations\n- Import organization\n- Security issues\n- Performance concerns\n\nProvide specific feedback with line numbers.",
+
+  ".md": "IMPORTANT: Start with `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\nDocumentation Review: {filename}\n\nChanges:\n{diff}\n\n{diff_only_note}\n\nFocus Areas:\n- Grammar and spelling\n- Clarity and readability\n- Markdown formatting\n- Link validation\n- Content completeness\n\nNote: Security is less relevant for docs.",
+
+  ".ts": "IMPORTANT: Start with `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\nTypeScript Review: {filename}\n\nChanges:\n{diff}\n\nContent:\n{content}\n\n{diff_only_note}\n\nFocus Areas:\n- Type safety and annotations\n- Modern ES6+ features\n- Error handling\n- Security (XSS, validation)\n- Performance optimization\n\nProvide specific feedback with line numbers."
+}
+```
+
+### Key Features
+
+*   **Automatic Fallback**: Files without custom prompts use the default comprehensive prompt
+*   **Extension Normalization**: Extensions are case-insensitive and normalized (e.g., `.PY` → `.py`)
+*   **Template Validation**: Invalid JSON or malformed prompts are logged and ignored
+*   **Performance**: Prompt selection is optimized and doesn't impact review speed
+*   **Debugging**: Use `--verbose` to see which files use custom prompts
+
+### Best Practices
+
+1.  **Always include the required response format**: Start prompts with the `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]` instruction
+2.  **Use all placeholders appropriately**: Include `{diff_only_note}` to handle diff-only mode gracefully
+3.  **Be specific about language concerns**: Focus on language-specific best practices and common issues
+4.  **Provide clear focus areas**: List 5-7 specific areas for the AI to examine
+5.  **Request line numbers**: Ask for specific feedback with line references
+6.  **Consider your workflow**: Create prompts that match your team's coding standards and review priorities
 
 ## Development Setup
 
