@@ -136,7 +136,7 @@ def load_filetype_prompts(prompts_file: Optional[str]) -> Dict[str, str]:
         prompts_file: Path to JSON file containing filetype-specific prompts
 
     Returns:
-        Dictionary mapping file extensions to custom prompt templates
+        Dictionary mapping glob patterns to custom prompt templates
     """
     if not prompts_file:
         return {}
@@ -154,22 +154,20 @@ def load_filetype_prompts(prompts_file: Optional[str]) -> Dict[str, str]:
             logging.error(f"Invalid filetype prompts file format: {prompts_file}")
             return {}
 
-        # Normalize extensions (ensure they start with .)
-        normalized_prompts = {}
-        for ext, prompt in prompts_data.items():
+        # Validate and store glob patterns
+        validated_prompts = {}
+        for pattern, prompt in prompts_data.items():
             if not isinstance(prompt, str):
-                logging.warning(f"Skipping non-string prompt for extension '{ext}'")
+                logging.warning(f"Skipping non-string prompt for pattern '{pattern}'")
                 continue
 
-            # Normalize extension
-            if not ext.startswith("."):
-                ext = f".{ext}"
-            normalized_prompts[ext.lower()] = prompt
+            # Store patterns as-is (they can be extensions, globs, or paths)
+            validated_prompts[pattern] = prompt
 
         logging.info(
-            f"Loaded {len(normalized_prompts)} filetype-specific prompts from {prompts_file}"
+            f"Loaded {len(validated_prompts)} glob pattern prompts from {prompts_file}"
         )
-        return normalized_prompts
+        return validated_prompts
 
     except (json.JSONDecodeError, IOError) as e:
         logging.error(f"Error loading filetype prompts from {prompts_file}: {e}")
@@ -189,19 +187,58 @@ def get_file_extension(filename: str) -> str:
 
 
 def select_prompt_template(
-    filename: str, filetype_prompts: Dict[str, str]
+    filename: str, glob_pattern_prompts: Dict[str, str]
 ) -> Optional[str]:
-    """Select the appropriate prompt template for a file.
+    """Select the appropriate prompt template for a file using glob patterns.
 
     Args:
         filename: Path to the file
-        filetype_prompts: Dictionary of filetype-specific prompts
+        glob_pattern_prompts: Dictionary mapping glob patterns to custom prompt templates
 
     Returns:
         Custom prompt template if found, None for default prompt
+
+    Pattern matching priority (first match wins):
+    1. Exact filename match (e.g., "main.py")
+    2. Full path patterns (e.g., "src/**/*.py", "tests/*.py")
+    3. File extension patterns (e.g., "*.py", "*.js")
+    4. Basename patterns (e.g., "test_*.py", "*_spec.js")
     """
-    extension = get_file_extension(filename)
-    return filetype_prompts.get(extension)
+    import fnmatch
+    import os
+
+    if not glob_pattern_prompts:
+        return None
+
+    # Get basename for pattern matching
+    basename = os.path.basename(filename)
+
+    # Priority 1: Exact filename match
+    if filename in glob_pattern_prompts:
+        return glob_pattern_prompts[filename]
+    if basename in glob_pattern_prompts:
+        return glob_pattern_prompts[basename]
+
+    # Priority 2-4: Pattern matching
+    # Sort patterns by specificity (longer patterns first)
+    sorted_patterns = sorted(glob_pattern_prompts.keys(), key=len, reverse=True)
+
+    for pattern in sorted_patterns:
+        # Skip if already checked exact matches
+        if pattern == filename or pattern == basename:
+            continue
+
+        # Try full path match first
+        if fnmatch.fnmatch(filename, pattern):
+            return glob_pattern_prompts[pattern]
+
+        # Try basename match
+        if fnmatch.fnmatch(basename, pattern):
+            return glob_pattern_prompts[pattern]
+
+    return None
+
+
 def redact(text: str, skip_if_empty: bool = False) -> str:
     """Redact secrets from a string using predefined patterns.
 
@@ -781,7 +818,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--filetype-prompts",
-        help='Path to JSON file containing filetype-specific prompts. File should map extensions to custom prompt templates (e.g., {".py": "Review this Python code...", ".md": "Review this documentation..."})',
+        help='Path to JSON file containing glob pattern-specific prompts. File should map glob patterns to custom prompt templates (e.g., {"*.py": "Review this Python code...", "tests/**/*.py": "Review this test file...", "src/core/*.py": "Review this core module..."}). Supports exact filenames, extensions, and glob patterns.',
     )
 
     args = parser.parse_args()
