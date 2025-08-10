@@ -8,6 +8,7 @@ using the OpenAI API with configurable models and endpoints.
 
 import argparse
 import concurrent.futures
+import fnmatch
 import json
 import logging
 import os
@@ -87,11 +88,8 @@ def should_review_file(
     - If exclude_patterns is provided and file matches any exclude pattern, it's excluded
     - Exclude patterns take precedence over include patterns
     """
-    import fnmatch
-    import os
-
     # Get the basename for pattern matching
-    basename = os.path.basename(filename)
+    basename = Path(filename).name
 
     # Check exclude patterns first (they take precedence)
     if exclude_patterns:
@@ -204,14 +202,11 @@ def select_prompt_template(
     3. File extension patterns (e.g., "*.py", "*.js")
     4. Basename patterns (e.g., "test_*.py", "*_spec.js")
     """
-    import fnmatch
-    import os
-
     if not glob_pattern_prompts:
         return None
 
     # Get basename for pattern matching
-    basename = os.path.basename(filename)
+    basename = Path(filename).name
 
     # Priority 1: Exact filename match
     if filename in glob_pattern_prompts:
@@ -330,7 +325,11 @@ class AIReviewer:
                 timeout=30,
             )
             return result.stdout
-        except subprocess.CalledProcessError:
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            FileNotFoundError,
+        ):
             # Fallback to unstaged changes if no staged changes
             try:
                 result = subprocess.run(
@@ -341,7 +340,11 @@ class AIReviewer:
                     timeout=30,
                 )
                 return result.stdout
-            except subprocess.CalledProcessError:
+            except (
+                subprocess.CalledProcessError,
+                subprocess.TimeoutExpired,
+                FileNotFoundError,
+            ):
                 return ""
 
     def is_binary_file(self, filename: str) -> bool:
@@ -393,6 +396,14 @@ class AIReviewer:
                 if diff_only
                 else "",
             )
+
+            # Ensure custom prompts include the required response format instruction
+            if "AI-REVIEW:[" not in prompt:
+                prompt = (
+                    "IMPORTANT: Your first line of response must be either `AI-REVIEW:[PASS]` or `AI-REVIEW:[FAIL]`.\n\n"
+                    + prompt
+                )
+
             logging.debug(
                 f"Using filetype-specific prompt for {filename} ({get_file_extension(filename)})"
             )
@@ -570,6 +581,18 @@ Provide specific, actionable feedback with line numbers where possible. If no si
                     temperature=self.temperature,
                 )
 
+                # Guard against missing or empty choices
+                if not response.choices or len(response.choices) == 0:
+                    return (
+                        "AI-REVIEW:[FAIL] Empty response from API - no choices returned"
+                    )
+
+                if (
+                    not response.choices[0].message
+                    or not response.choices[0].message.content
+                ):
+                    return "AI-REVIEW:[FAIL] Empty message content from API"
+
                 return response.choices[0].message.content
 
             except Exception as e:
@@ -714,7 +737,10 @@ Provide specific, actionable feedback with line numbers where possible. If no si
 
 def main() -> int:
     """Main entry point for the AI review hook."""
-    parser = argparse.ArgumentParser(description="AI-assisted code review using OpenAI")
+    parser = argparse.ArgumentParser(
+        description="AI-assisted code review using OpenAI",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument("files", nargs="*", help="Files to review")
     parser.add_argument(
         "--api-key-env",
@@ -838,8 +864,16 @@ def main() -> int:
                 logging.error(
                     "If you trust this endpoint, use --allow-unsafe-base-url flag."
                 )
+                logging.error(
+                    "Note: Azure OpenAI and other third-party endpoints require this flag."
+                )
                 return 1
             else:
+                # Warn about non-HTTPS endpoints
+                if not args.base_url.startswith("https://"):
+                    logging.warning(
+                        f"WARNING: Base URL '{args.base_url}' is not using HTTPS! This is insecure."
+                    )
                 logging.warning(
                     f"Using custom base URL: {args.base_url}. Code will be sent to this endpoint."
                 )
@@ -930,7 +964,17 @@ def main() -> int:
         # Sequential processing (original behavior)
         for filename in args.files:
             logging.info(f"Reviewing {filename}...")
-            filename, passed, review, diff = review_single_file(filename)
+            try:
+                filename, passed, review, diff = review_single_file(filename)
+            except Exception as exc:
+                # Handle exceptions in sequential processing same as parallel
+                logging.error(f"Review of {filename} generated an exception: {exc}")
+                filename, passed, review, diff = (
+                    filename,
+                    False,
+                    f"AI-REVIEW:[FAIL] Exception during review: {exc}",
+                    "",
+                )
 
             if not passed:
                 failed_files.append(filename)
@@ -943,9 +987,11 @@ File: {filename}
 
 """
             if args.verbose:
+                # Use redacted diff in logs to prevent secret leakage
+                redacted_diff_for_log = redact(diff)
                 review_log_entry += f"""Git Diff:
 ```
-{diff}```
+{redacted_diff_for_log}```
 
 """
             review_log_entry += review
@@ -1000,9 +1046,11 @@ File: {filename}
 
 """
                 if args.verbose:
+                    # Use redacted diff in logs to prevent secret leakage
+                    redacted_diff_for_log = redact(diff)
                     review_log_entry += f"""Git Diff:
 ```
-{diff}```
+{redacted_diff_for_log}```
 
 """
                 review_log_entry += review
