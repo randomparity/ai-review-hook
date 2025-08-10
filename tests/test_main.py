@@ -31,6 +31,7 @@ def test_redact_private_key():
 def test_review_file_pass(mock_openai):
     """Test that the review passes when the AI returns a PASS marker."""
     mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = "AI-REVIEW:[PASS]\nLGTM!"
     mock_openai.return_value.chat.completions.create.return_value = mock_response
 
@@ -45,6 +46,7 @@ def test_review_file_pass(mock_openai):
 def test_review_file_fail(mock_openai):
     """Test that the review fails when the AI returns a FAIL marker."""
     mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = "AI-REVIEW:[FAIL]\nThis is not good."
     mock_openai.return_value.chat.completions.create.return_value = mock_response
 
@@ -59,6 +61,7 @@ def test_review_file_fail(mock_openai):
 def test_review_file_empty_response(mock_openai):
     """Test that the review fails when the AI returns empty content."""
     mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = ""
     mock_openai.return_value.chat.completions.create.return_value = mock_response
 
@@ -66,13 +69,14 @@ def test_review_file_empty_response(mock_openai):
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
         passed, review = reviewer.review_file("test.py", diff="- some changes")
         assert passed is False
-        assert "Empty or blank response from AI model" in review
+        assert "Empty message content from API" in review
 
 
 @patch("src.ai_review_hook.main.openai.OpenAI")
 def test_review_file_blank_response(mock_openai):
     """Test that the review fails when the AI returns blank/whitespace content."""
     mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = "   \n\t  "
     mock_openai.return_value.chat.completions.create.return_value = mock_response
 
@@ -186,6 +190,7 @@ def test_binary_file_detection(mock_openai):
 def test_diff_only_mode(mock_openai):
     """Test that diff-only mode works correctly."""
     mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = "AI-REVIEW:[PASS]\nLooks good!"
     mock_openai.return_value.chat.completions.create.return_value = mock_response
 
@@ -289,6 +294,7 @@ def test_parallel_processing_simulation(mock_openai):
     """Test that parallel processing components work correctly."""
     # Mock successful AI response
     mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = "AI-REVIEW:[PASS]\nLooks good!"
     mock_openai.return_value.chat.completions.create.return_value = mock_response
 
@@ -326,6 +332,7 @@ def test_parallel_processing_simulation(mock_openai):
 def test_intelligent_truncation_integration(mock_openai):
     """Test that size limits with truncation work in review_file."""
     mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = "AI-REVIEW:[PASS]\nOK"
     mock_openai.return_value.chat.completions.create.return_value = mock_response
 
@@ -448,6 +455,7 @@ def test_retry_on_rate_limit(mock_openai, mock_sleep):
     # Mock rate limit error on first two calls, success on third
     mock_client = mock_openai.return_value
     mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = "AI-REVIEW:[PASS]\nSuccess after retry!"
 
     # Create test exception classes that inherit from the real ones
@@ -559,6 +567,7 @@ def test_retry_with_different_error_types(mock_openai, mock_sleep):
     # Mock different retryable errors, then success
     mock_client = mock_openai.return_value
     mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = "AI-REVIEW:[PASS]\nSuccess!"
 
     # Create test exception classes
@@ -607,6 +616,7 @@ def test_review_file_with_retry_integration(mock_openai):
     # Mock rate limit error on first call, success on second
     mock_client = mock_openai.return_value
     mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
     mock_response.choices[
         0
     ].message.content = "AI-REVIEW:[PASS]\nLooks good after retry!"
