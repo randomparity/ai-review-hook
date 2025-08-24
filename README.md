@@ -9,7 +9,7 @@ This project provides a pre-commit hook for AI-assisted code reviews using the O
     ```yaml
     repos:
     -   repo: https://github.com/randomparity/ai-review-hook
-        rev: v1.0.0  # Replace with the desired tag or commit SHA
+        rev: v0.2.0  # Replace with the desired tag or commit SHA
         hooks:
         -   id: ai-review
     ```
@@ -18,7 +18,7 @@ This project provides a pre-commit hook for AI-assisted code reviews using the O
 
     ```yaml
     - repo: https://github.com/randomparity/ai-review-hook
-      rev: v0.1.1
+      rev: v0.2.0
       hooks:
         - id: ai-review
           name: AI Code Review
