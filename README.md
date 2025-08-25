@@ -110,7 +110,21 @@ pre-commit run ai-review --all-files -- --format json --output-file ai-review.js
 
 # Generate a Code Climate report for CI
 pre-commit run ai-review --all-files -- --format codeclimate --output-file gl-code-quality-report.json
+
+# Example .pre-commit-config.yaml
+```yaml
+- repo: https://github.com/randomparity/ai-review-hook
+  rev: v0.2.0
+  hooks:
+    - id: ai-review
+      name: AI Code Review (Code Quality)
+      args:
+        - "--format"
+        - "codeclimate"
+        - "--output-file"
+        - "gl-code-quality-report.json"
 ```
+
 
 ## Security Features
 
