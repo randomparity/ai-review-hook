@@ -89,10 +89,28 @@ The result is [AI Hook Review](https://github.com/randomparity/ai-review-hook), 
 *   `--jobs`, `-j`: Number of parallel jobs for reviewing multiple files (default: 1)
 *   `--allow-unsafe-base-url`: Allow custom base URLs other than official OpenAI endpoints
 *   `--output-file`: File to save the complete review output
+*   `--format`: Output format: `text` (default), `json`, or `codeclimate`. `codeclimate` produces Code Climate-compatible JSON for GitLab/GitHub code-quality reports; `json` is machine-readable.
 *   `--include-files`: File patterns to include for review (e.g., '*.py' or '*.py,*.js'). Can be specified multiple times. If not specified, all files are included by default.
 *   `--exclude-files`: File patterns to exclude from review (e.g., '*.test.py' or '*.test.*,*.spec.*'). Can be specified multiple times. Exclude patterns take precedence over include patterns.
 *   `--filetype-prompts`: Path to JSON file containing filetype-specific prompts. File should map glob patterns to custom prompt templates (e.g., `{"*.py": "Review this Python code...", "*.md": "Review this documentation...", "test_*.py": "Review this test file...", "src/**/*.js": "Review this JavaScript source..."}`)
 *   `-v`, `--verbose`: Enable verbose logging
+
+
+### Output Formats
+
+- text (default): human-readable review summary suitable for local runs.
+- json: machine-readable array for scripting or tooling.
+- codeclimate: Code Climate-compatible JSON for GitHub/GitLab code-quality reports.
+
+Examples:
+
+```bash
+# Save JSON output to a file
+pre-commit run ai-review --all-files -- --format json --output-file ai-review.json
+
+# Generate a Code Climate report for CI
+pre-commit run ai-review --all-files -- --format codeclimate --output-file gl-code-quality-report.json
+```
 
 ## Security Features
 
@@ -374,21 +392,8 @@ pre-commit run ai-review --all-files -- \
 8.  **Consider your project structure**: Create patterns that match your team's directory organization and naming conventions
 9.  **Test your patterns**: Use `--verbose` to verify which files match which patterns during development
 
-## Development Setup
 
-To contribute to this project, first clone the repository and then install the necessary dependencies for local development:
-
-```sh
-pip install -r requirements-dev.txt
-```
-
-Next, install the pre-commit hooks to ensure your contributions adhere to the project's linting and formatting standards:
-
-```sh
-pre-commit install
-```
-
-Now, every time you commit your changes, the pre-commit hooks will automatically run, checking for any issues. If any are found, the commit will be aborted, allowing you to fix the issues before committing again.
+> For development and build instructions, see BUILD.md and CONTRIBUTING.md.
 
 ## License
 
