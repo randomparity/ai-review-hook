@@ -11,8 +11,8 @@ import pytest
 # Add the src directory to sys.path to import the local module
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from ai_review_hook.main import (
-    AIReviewer,
+from ai_review_hook.reviewer import AIReviewer
+from ai_review_hook.utils import (
     get_file_extension,
     load_filetype_prompts,
     select_prompt_template,
@@ -96,7 +96,7 @@ class TestFiletypePrompts:
 
     def test_load_filetype_prompts_missing_file(self):
         """Test loading prompts from non-existent file."""
-        with patch("ai_review_hook.main.logging") as mock_logging:
+        with patch("ai_review_hook.utils.logging") as mock_logging:
             result = load_filetype_prompts("/nonexistent/file.json")
             assert result == {}
             mock_logging.warning.assert_called_once()
@@ -108,7 +108,7 @@ class TestFiletypePrompts:
             temp_path = f.name
 
         try:
-            with patch("ai_review_hook.main.logging") as mock_logging:
+            with patch("ai_review_hook.utils.logging") as mock_logging:
                 result = load_filetype_prompts(temp_path)
                 assert result == {}
                 mock_logging.error.assert_called_once()
@@ -122,7 +122,7 @@ class TestFiletypePrompts:
             temp_path = f.name
 
         try:
-            with patch("ai_review_hook.main.logging") as mock_logging:
+            with patch("ai_review_hook.utils.logging") as mock_logging:
                 result = load_filetype_prompts(temp_path)
                 assert result == {}
                 mock_logging.error.assert_called_once()
@@ -143,7 +143,7 @@ class TestFiletypePrompts:
             temp_path = f.name
 
         try:
-            with patch("ai_review_hook.main.logging") as mock_logging:
+            with patch("ai_review_hook.utils.logging") as mock_logging:
                 result = load_filetype_prompts(temp_path)
 
                 # Should skip invalid values (no normalization in new system)
@@ -241,7 +241,7 @@ class TestAIReviewerFiletypePrompts:
         assert "Please perform a thorough code review" in prompt
         assert "Code Quality & Best Practices" in prompt
 
-    @patch("ai_review_hook.main.logging")
+    @patch("ai_review_hook.reviewer.logging")
     def test_create_review_prompt_logs_custom_usage(
         self, mock_logging, reviewer_with_prompts
     ):
