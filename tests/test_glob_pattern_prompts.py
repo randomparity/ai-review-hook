@@ -16,11 +16,11 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.ai_review_hook.main import (
+from src.ai_review_hook.utils import (
     load_filetype_prompts,
     select_prompt_template,
-    AIReviewer,
 )
+from src.ai_review_hook.reviewer import AIReviewer
 
 
 class TestGlobPatternPrompts(unittest.TestCase):
@@ -179,7 +179,7 @@ class TestGlobPatternPrompts(unittest.TestCase):
 
     def test_load_filetype_prompts_nonexistent_file(self):
         """Test loading nonexistent prompt file."""
-        with patch("src.ai_review_hook.main.logging") as mock_logging:
+        with patch("src.ai_review_hook.utils.logging") as mock_logging:
             result = load_filetype_prompts("/nonexistent/file.json")
             self.assertEqual(result, {})
             mock_logging.warning.assert_called_once()
@@ -191,7 +191,7 @@ class TestGlobPatternPrompts(unittest.TestCase):
         with open(prompts_file, "w") as f:
             f.write("{ invalid json }")
 
-        with patch("src.ai_review_hook.main.logging") as mock_logging:
+        with patch("src.ai_review_hook.utils.logging") as mock_logging:
             result = load_filetype_prompts(prompts_file)
             self.assertEqual(result, {})
             mock_logging.error.assert_called_once()
@@ -202,7 +202,7 @@ class TestGlobPatternPrompts(unittest.TestCase):
         with open(prompts_file, "w") as f:
             json.dump(["not", "a", "dict"], f)
 
-        with patch("src.ai_review_hook.main.logging") as mock_logging:
+        with patch("src.ai_review_hook.utils.logging") as mock_logging:
             result = load_filetype_prompts(prompts_file)
             self.assertEqual(result, {})
             mock_logging.error.assert_called_once()
@@ -220,7 +220,7 @@ class TestGlobPatternPrompts(unittest.TestCase):
         with open(prompts_file, "w") as f:
             json.dump(prompts_data, f)
 
-        with patch("src.ai_review_hook.main.logging") as mock_logging:
+        with patch("src.ai_review_hook.utils.logging") as mock_logging:
             result = load_filetype_prompts(prompts_file)
             expected = {"*.py": "Valid Python prompt", "*.go": "Valid Go prompt"}
             self.assertEqual(result, expected)
@@ -244,7 +244,7 @@ class TestAIReviewerGlobPatternIntegration(unittest.TestCase):
         """Set up test fixtures."""
         self.mock_client = Mock()
 
-    @patch("src.ai_review_hook.main.openai.OpenAI")
+    @patch("src.ai_review_hook.reviewer.openai.OpenAI")
     def test_create_review_prompt_with_glob_patterns(self, mock_openai):
         """Test review prompt creation with glob pattern prompts."""
         glob_patterns = {
@@ -273,7 +273,7 @@ class TestAIReviewerGlobPatternIntegration(unittest.TestCase):
         )
         self.assertIn("Core module prompt for src/core/engine.py", prompt)
 
-    @patch("src.ai_review_hook.main.openai.OpenAI")
+    @patch("src.ai_review_hook.reviewer.openai.OpenAI")
     def test_create_review_prompt_fallback_to_default(self, mock_openai):
         """Test fallback to default prompt when no pattern matches."""
         glob_patterns = {
@@ -290,7 +290,7 @@ class TestAIReviewerGlobPatternIntegration(unittest.TestCase):
         self.assertIn("Please perform a thorough code review", prompt)
         self.assertIn("AI-REVIEW:[PASS]", prompt)
 
-    @patch("src.ai_review_hook.main.openai.OpenAI")
+    @patch("src.ai_review_hook.reviewer.openai.OpenAI")
     def test_create_review_prompt_complex_glob_patterns(self, mock_openai):
         """Test complex glob patterns including wildcards and paths."""
         glob_patterns = {
@@ -327,7 +327,7 @@ class TestAIReviewerGlobPatternIntegration(unittest.TestCase):
         prompt = reviewer.create_review_prompt("config.yaml", "diff", "content")
         self.assertIn("Configuration file prompt", prompt)
 
-    @patch("src.ai_review_hook.main.openai.OpenAI")
+    @patch("src.ai_review_hook.reviewer.openai.OpenAI")
     def test_create_review_prompt_with_placeholders(self, mock_openai):
         """Test that custom prompts properly handle format placeholders."""
         glob_patterns = {

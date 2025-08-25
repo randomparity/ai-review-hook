@@ -1,5 +1,7 @@
+import json
 from unittest.mock import MagicMock, patch
-from src.ai_review_hook.main import redact, AIReviewer
+from src.ai_review_hook.utils import redact
+from src.ai_review_hook.reviewer import AIReviewer
 import concurrent.futures
 
 
@@ -27,7 +29,7 @@ def test_redact_private_key():
     assert "BEGIN RSA PRIVATE KEY" not in redacted_text
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_review_file_pass(mock_openai):
     """Test that the review passes when the AI returns a PASS marker."""
     mock_response = MagicMock()
@@ -37,12 +39,13 @@ def test_review_file_pass(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review = reviewer.review_file("test.py", diff="- some changes")
+        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
         assert passed is True
         assert "AI-REVIEW:[PASS]" in review
+        assert findings is None
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_review_file_fail(mock_openai):
     """Test that the review fails when the AI returns a FAIL marker."""
     mock_response = MagicMock()
@@ -52,12 +55,13 @@ def test_review_file_fail(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review = reviewer.review_file("test.py", diff="- some changes")
+        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
         assert passed is False
         assert "AI-REVIEW:[FAIL]" in review
+        assert findings is None
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_review_file_empty_response(mock_openai):
     """Test that the review fails when the AI returns empty content."""
     mock_response = MagicMock()
@@ -67,12 +71,13 @@ def test_review_file_empty_response(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review = reviewer.review_file("test.py", diff="- some changes")
+        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
         assert passed is False
         assert "Empty message content from API" in review
+        assert findings is None
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_review_file_blank_response(mock_openai):
     """Test that the review fails when the AI returns blank/whitespace content."""
     mock_response = MagicMock()
@@ -82,12 +87,13 @@ def test_review_file_blank_response(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review = reviewer.review_file("test.py", diff="- some changes")
+        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
         assert passed is False
         assert "Empty or blank response from AI model" in review
+        assert findings is None
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_review_file_api_error(mock_openai):
     """Test that API errors are handled gracefully."""
     import openai
@@ -104,13 +110,14 @@ def test_review_file_api_error(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review = reviewer.review_file("test.py", diff="- some changes")
+        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
         assert passed is False
         assert "OpenAI API Error" in review
         assert "429" in review
+        assert findings is None
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_review_file_generic_error(mock_openai):
     """Test that generic errors are handled gracefully."""
     # Test generic exception handling
@@ -120,10 +127,11 @@ def test_review_file_generic_error(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review = reviewer.review_file("test.py", diff="- some changes")
+        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
         assert passed is False
         assert "Unexpected error during AI review" in review
         assert "Something went wrong" in review
+        assert findings is None
 
 
 def test_redact_github_tokens():
@@ -174,7 +182,7 @@ def test_redact_generic_api_keys():
     assert "sk-1234567890abcdefghijklmnopqrstuvwxyz" not in redacted_text
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_binary_file_detection(mock_openai):
     """Test that binary files are detected and handled securely."""
     reviewer = AIReviewer(api_key="test_key")
@@ -186,7 +194,7 @@ def test_binary_file_detection(mock_openai):
         assert content.startswith("[BINARY FILE")
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_diff_only_mode(mock_openai):
     """Test that diff-only mode works correctly."""
     mock_response = MagicMock()
@@ -200,7 +208,7 @@ def test_diff_only_mode(mock_openai):
     with patch.object(
         reviewer, "create_review_prompt", return_value="test prompt"
     ) as mock_prompt:
-        passed, review = reviewer.review_file(
+        passed, review, findings = reviewer.review_file(
             "test.py", diff="- some changes", diff_only=True
         )
 
@@ -228,7 +236,7 @@ def test_redact_skip_if_empty():
     assert "sk-1234567890abcdefghijklmnopqrstuvwxyz" not in result
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_truncate_text_with_marker(mock_openai):
     """Test text truncation with clear markers."""
     reviewer = AIReviewer(api_key="test_key")
@@ -250,7 +258,7 @@ def test_truncate_text_with_marker(mock_openai):
     assert "[TRUNCATED - test too large (1000 bytes)]" == tiny_limit
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_extract_changed_hunks(mock_openai):
     """Test extraction of changed hunks from diff."""
     reviewer = AIReviewer(api_key="test_key")
@@ -289,7 +297,7 @@ index 1234567..abcdefg 100644
     assert "[TRUNCATED - showing first 5 hunks of diff]" in truncated_result
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_parallel_processing_simulation(mock_openai):
     """Test that parallel processing components work correctly."""
     # Mock successful AI response
@@ -303,8 +311,8 @@ def test_parallel_processing_simulation(mock_openai):
     # Test the review_single_file function concept
     def review_single_file(filename: str):
         diff = "- some changes"
-        passed, review = reviewer.review_file(filename, diff=diff)
-        return filename, passed, review, diff
+        passed, review, findings = reviewer.review_file(filename, diff=diff)
+        return filename, passed, review, diff, findings
 
     # Simulate parallel processing with ThreadPoolExecutor
     files = ["file1.py", "file2.py", "file3.py"]
@@ -323,12 +331,12 @@ def test_parallel_processing_simulation(mock_openai):
         assert set(filenames) == set(files)
 
         # All should pass
-        for _, passed, review, _ in results:
+        for _, passed, review, _, _ in results:
             assert passed is True
             assert "AI-REVIEW:[PASS]" in review
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_intelligent_truncation_integration(mock_openai):
     """Test that size limits with truncation work in review_file."""
     mock_response = MagicMock()
@@ -343,7 +351,7 @@ def test_intelligent_truncation_integration(mock_openai):
 
     with patch.object(reviewer, "get_file_content", return_value="small content"):
         # Should truncate diff but not fail
-        passed, review = reviewer.review_file(
+        passed, review, findings = reviewer.review_file(
             "test.py", diff=large_diff, max_diff_bytes=500, max_content_bytes=1000
         )
 
@@ -360,7 +368,7 @@ def test_intelligent_truncation_integration(mock_openai):
         )
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_is_retryable_error(mock_openai):
     """Test that retryable errors are correctly identified."""
     import openai
@@ -414,7 +422,7 @@ def test_is_retryable_error(mock_openai):
     assert not reviewer._is_retryable_error(MockErrorWithStatus(403))
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_calculate_retry_delay(mock_openai):
     """Test that retry delays are calculated correctly with exponential backoff and jitter."""
     reviewer = AIReviewer(
@@ -441,8 +449,8 @@ def test_calculate_retry_delay(mock_openai):
     assert delay_large <= reviewer.max_retry_delay * 1.1  # Allow for jitter
 
 
-@patch("src.ai_review_hook.main.time.sleep")
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.time.sleep")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_retry_on_rate_limit(mock_openai, mock_sleep):
     """Test that rate limit errors trigger retries."""
     import openai
@@ -486,8 +494,8 @@ def test_retry_on_rate_limit(mock_openai, mock_sleep):
     assert mock_sleep.call_count == 2
 
 
-@patch("src.ai_review_hook.main.time.sleep")
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.time.sleep")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_retry_exhaustion(mock_openai, mock_sleep):
     """Test that retries are exhausted and final error is raised."""
     import openai
@@ -523,7 +531,7 @@ def test_retry_exhaustion(mock_openai, mock_sleep):
     assert mock_sleep.call_count == 2
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_non_retryable_error_no_retry(mock_openai):
     """Test that non-retryable errors don't trigger retries."""
     import openai
@@ -554,8 +562,8 @@ def test_non_retryable_error_no_retry(mock_openai):
     assert mock_client.chat.completions.create.call_count == 1
 
 
-@patch("src.ai_review_hook.main.time.sleep")
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.time.sleep")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_retry_with_different_error_types(mock_openai, mock_sleep):
     """Test retry behavior with different types of retryable errors."""
     import openai
@@ -604,7 +612,7 @@ def test_retry_with_different_error_types(mock_openai, mock_sleep):
     assert mock_sleep.call_count == 3
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_review_file_with_retry_integration(mock_openai):
     """Test that review_file properly integrates with retry mechanism."""
     import openai
@@ -629,8 +637,8 @@ def test_review_file_with_retry_integration(mock_openai):
     rate_limit_error = TestRateLimitError()
     mock_client.chat.completions.create.side_effect = [rate_limit_error, mock_response]
 
-    with patch("src.ai_review_hook.main.time.sleep"):
-        passed, review = reviewer.review_file("test.py", diff="- some changes")
+    with patch("src.ai_review_hook.reviewer.time.sleep"):
+        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
 
     # Should succeed after retry
     assert passed is True
@@ -641,7 +649,7 @@ def test_review_file_with_retry_integration(mock_openai):
     assert mock_client.chat.completions.create.call_count == 2
 
 
-@patch("src.ai_review_hook.main.openai.OpenAI")
+@patch("src.ai_review_hook.reviewer.openai.OpenAI")
 def test_retry_configuration_parameters(mock_openai):
     """Test that retry configuration parameters are properly set."""
     reviewer = AIReviewer(
@@ -665,7 +673,7 @@ def test_retry_configuration_parameters(mock_openai):
 
 def test_file_filtering_integration():
     """Test file filtering integration with main function."""
-    from src.ai_review_hook.main import parse_file_patterns, should_review_file
+    from src.ai_review_hook.utils import parse_file_patterns, should_review_file
 
     # Test parse_file_patterns function
     assert parse_file_patterns(["*.py,*.js", "*.go"]) == ["*.py", "*.js", "*.go"]
@@ -712,6 +720,7 @@ def test_command_line_file_filtering():
                 mock_reviewer.review_file.return_value = (
                     True,
                     "AI-REVIEW:[PASS] Good code",
+                    None,
                 )
                 mock_reviewer_class.return_value = mock_reviewer
 
@@ -782,3 +791,220 @@ def test_file_filtering_edge_cases():
     exclude = ["test_*.py", "**/test_*"]
     assert should_review_file("src/main.py", include, exclude)
     assert not should_review_file("src/test_main.py", include, exclude)
+
+
+def test_parse_review_text_with_findings():
+    """Test parsing of review text with JSON findings."""
+    review_text = """AI-REVIEW:[FAIL]
+This is a review.
+
+```json
+{
+  "findings": [
+    {
+      "line": 10,
+      "message": "This is a test finding."
+    }
+  ]
+}
+```
+"""
+    human_text, findings = AIReviewer._parse_review_text(review_text)
+    assert "This is a review." in human_text
+    assert "```json" not in human_text
+    assert findings is not None
+    assert len(findings) == 1
+    assert findings[0]["line"] == 10
+    assert findings[0]["message"] == "This is a test finding."
+
+
+def test_parse_review_text_no_findings():
+    """Test parsing of review text without JSON findings."""
+    review_text = "AI-REVIEW:[PASS]\\nThis is a review without findings."
+    human_text, findings = AIReviewer._parse_review_text(review_text)
+    assert "This is a review without findings." in human_text
+    assert findings is None
+
+
+def test_parse_review_text_malformed_json():
+    """Test parsing of review text with malformed JSON."""
+    review_text = """AI-REVIEW:[FAIL]
+This is a review.
+
+```json
+{
+  "findings": [
+    {
+      "line": 10,
+      "message": "This is a test finding."
+    }
+  ],
+}
+```
+"""
+    human_text, findings = AIReviewer._parse_review_text(review_text)
+    # Should return original text and no findings
+    assert "```json" in human_text
+    assert findings is None
+
+
+def test_determine_pass_fail():
+    """Test the pass/fail determination logic."""
+    reviewer = AIReviewer(api_key="test")
+    assert reviewer._determine_pass_fail("AI-REVIEW:[PASS]\\nLGTM") is True
+    assert reviewer._determine_pass_fail("AI-REVIEW:[FAIL]\\nNot good") is False
+    assert reviewer._determine_pass_fail("Some other text\\nAI-REVIEW:[FAIL]") is False
+    assert reviewer._determine_pass_fail("No marker here") is False
+
+
+def test_format_as_text():
+    """Test text formatting."""
+    from src.ai_review_hook.formatters import format_as_text
+    mock_reviews = [
+        (
+            "file1.py",
+            False,
+            "AI-REVIEW:[FAIL]\\nReview for file1",
+            [{"line": 1, "message": "finding 1", "severity": "major", "check_name": "check1"}],
+        ),
+        (
+            "file2.py",
+            True,
+            "AI-REVIEW:[PASS]\\nReview for file2",
+            [],
+        ),
+    ]
+    output = format_as_text(mock_reviews)
+    assert "Review for file1" in output
+    assert "Review for file2" in output
+
+def test_format_as_json():
+    """Test JSON formatting."""
+    from src.ai_review_hook.formatters import format_as_json
+    mock_reviews = [
+        (
+            "file1.py",
+            False,
+            "AI-REVIEW:[FAIL]\\nReview for file1",
+            [{"line": 1, "message": "finding 1", "severity": "major", "check_name": "check1"}],
+        ),
+        (
+            "file2.py",
+            True,
+            "AI-REVIEW:[PASS]\\nReview for file2",
+            [],
+        ),
+    ]
+    output = format_as_json(mock_reviews)
+    data = json.loads(output)
+    assert len(data) == 2
+    assert data[0]["filename"] == "file1.py"
+    assert data[0]["passed"] is False
+    assert len(data[0]["findings"]) == 1
+    assert data[1]["filename"] == "file2.py"
+    assert data[1]["passed"] is True
+    assert len(data[1]["findings"]) == 0
+
+def test_format_as_codeclimate():
+    """Test CodeClimate formatting."""
+    from src.ai_review_hook.formatters import format_as_codeclimate
+    mock_reviews = [
+        (
+            "file1.py",
+            False,
+            "AI-REVIEW:[FAIL]\\nReview for file1",
+            [{"line": 1, "message": "finding 1", "severity": "major", "check_name": "check1"}],
+        ),
+        (
+            "file2.py",
+            True,
+            "AI-REVIEW:[PASS]\\nReview for file2",
+            [],
+        ),
+        (
+            "file3.py",
+            False,
+            "AI-REVIEW:[FAIL]\\nReview for file3",
+            [{"line": None, "message": "general finding", "severity": "minor", "check_name": "check2"}],
+        ),
+    ]
+    output = format_as_codeclimate(mock_reviews)
+    data = json.loads(output)
+    assert len(data) == 1
+    assert data[0]["description"] == "finding 1"
+    assert data[0]["location"]["path"] == "file1.py"
+    assert data[0]["location"]["lines"]["begin"] == 1
+    assert "fingerprint" in data[0]
+
+
+@patch("src.ai_review_hook.main.format_as_json")
+@patch("src.ai_review_hook.main.AIReviewer")
+def test_main_format_json(mock_reviewer_class, mock_formatter):
+    """Test that main calls the json formatter."""
+    from src.ai_review_hook.main import main
+    import sys
+
+    # Mock AIReviewer
+    mock_reviewer = MagicMock()
+    mock_reviewer.get_file_diff.return_value = "- diff"
+    mock_reviewer.review_file.return_value = (True, "AI-REVIEW:[PASS]", [])
+    mock_reviewer_class.return_value = mock_reviewer
+
+    # Mock the formatter to check if it's called
+    mock_formatter.return_value = "[]"
+
+    test_args = ["ai-review", "--format", "json", "file1.py"]
+    with patch.object(sys, "argv", test_args):
+        with patch("os.getenv", return_value="fake-api-key"):
+            with patch("builtins.print") as mock_print:
+                main()
+                mock_formatter.assert_called_once()
+                mock_print.assert_called_with("[]")
+
+@patch("src.ai_review_hook.main.format_as_codeclimate")
+@patch("src.ai_review_hook.main.AIReviewer")
+def test_main_format_codeclimate(mock_reviewer_class, mock_formatter):
+    """Test that main calls the codeclimate formatter."""
+    from src.ai_review_hook.main import main
+    import sys
+
+    # Mock AIReviewer
+    mock_reviewer = MagicMock()
+    mock_reviewer.get_file_diff.return_value = "- diff"
+    mock_reviewer.review_file.return_value = (True, "AI-REVIEW:[PASS]", [])
+    mock_reviewer_class.return_value = mock_reviewer
+
+    # Mock the formatter to check if it's called
+    mock_formatter.return_value = "[]"
+
+    test_args = ["ai-review", "--format", "codeclimate", "file1.py"]
+    with patch.object(sys, "argv", test_args):
+        with patch("os.getenv", return_value="fake-api-key"):
+            with patch("builtins.print") as mock_print:
+                main()
+                mock_formatter.assert_called_once()
+                mock_print.assert_called_with("[]")
+
+@patch("src.ai_review_hook.main.format_as_text")
+@patch("src.ai_review_hook.main.AIReviewer")
+def test_main_format_text(mock_reviewer_class, mock_formatter):
+    """Test that main calls the text formatter."""
+    from src.ai_review_hook.main import main
+    import sys
+
+    # Mock AIReviewer
+    mock_reviewer = MagicMock()
+    mock_reviewer.get_file_diff.return_value = "- diff"
+    mock_reviewer.review_file.return_value = (True, "AI-REVIEW:[PASS]", [])
+    mock_reviewer_class.return_value = mock_reviewer
+
+    # Mock the formatter to check if it's called
+    mock_formatter.return_value = "text output"
+
+    test_args = ["ai-review", "--format", "text", "file1.py"]
+    with patch.object(sys, "argv", test_args):
+        with patch("os.getenv", return_value="fake-api-key"):
+            with patch("builtins.print") as mock_print:
+                main()
+                mock_formatter.assert_called_once()
+                mock_print.assert_called_with("text output")

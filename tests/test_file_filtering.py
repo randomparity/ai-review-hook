@@ -4,7 +4,7 @@ Unit tests for file type filtering functionality in AI Review Hook.
 """
 
 import pytest
-from src.ai_review_hook.main import should_review_file, parse_file_patterns
+from src.ai_review_hook.utils import should_review_file, parse_file_patterns
 
 
 class TestFileFiltering:
