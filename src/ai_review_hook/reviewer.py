@@ -2,7 +2,8 @@ import json
 import logging
 import random
 import re
-import subprocess
+import shutil
+import subprocess  # nosec B404
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -15,6 +16,7 @@ from .utils import get_file_extension, redact, select_prompt_template
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_MAX_TOKENS = 2000
 DEFAULT_TEMPERATURE = 0.1
+GIT_PATH = shutil.which("git")
 
 
 class AIReviewer:
@@ -67,11 +69,13 @@ class AIReviewer:
             filename: Path to the file
             context_lines: Number of context lines to include around changes
         """
+        if not GIT_PATH:
+            return ""
         try:
             # Get staged changes for the file with custom context
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603
                 [
-                    "git",
+                    GIT_PATH,
                     "diff",
                     "--cached",
                     f"--unified={context_lines}",
@@ -91,8 +95,8 @@ class AIReviewer:
         ):
             # Fallback to unstaged changes if no staged changes
             try:
-                result = subprocess.run(
-                    ["git", "diff", f"--unified={context_lines}", "--", filename],
+                result = subprocess.run(  # nosec B603
+                    [GIT_PATH, "diff", f"--unified={context_lines}", "--", filename],
                     capture_output=True,
                     text=True,
                     check=True,
@@ -361,7 +365,10 @@ Provide specific, actionable feedback with line numbers where possible. If no si
         # Cap at max delay
         base_delay = min(base_delay, self.max_retry_delay)
 
-        return float(base_delay + (base_delay * self.retry_jitter * random.random()))
+        return float(
+            base_delay
+            + (base_delay * self.retry_jitter * random.random())  # nosec B311
+        )
 
     def _make_api_call_with_retry(
         self, messages: List[ChatCompletionMessageParam], filename: str
