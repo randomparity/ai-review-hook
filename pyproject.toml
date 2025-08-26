@@ -41,6 +41,17 @@ ai-review = "ai_review_hook.main:main"
 Homepage = "https://github.com/randomparity/ai-review-hook"
 Repository = "https://github.com/randomparity/ai-review-hook"
 
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pre-commit",
+    "ruff",
+    "mypy",
+    "black",
+    "bandit"
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["ai_review_hook*"]
