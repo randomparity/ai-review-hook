@@ -11,7 +11,7 @@ import concurrent.futures
 import logging
 import os
 import sys
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 
 from .reviewer import AIReviewer, DEFAULT_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
 from .formatters import format_as_text, format_as_json, format_as_codeclimate
@@ -240,11 +240,11 @@ def main() -> int:
 
     # Review files (with optional parallel processing)
     failed_files = []
-    all_reviews = []
+    all_reviews: List[Tuple[str, bool, str, Optional[List[Dict[str, Any]]]]] = []
 
     def review_single_file(
         filename: str,
-    ) -> Tuple[str, bool, str, str, Optional[List[Dict]]]:
+    ) -> Tuple[str, bool, str, str, Optional[List[Dict[str, Any]]]]:
         """Review a single file and return results."""
         diff = reviewer.get_file_diff(filename, args.context_lines)
         passed, review, findings = reviewer.review_file(

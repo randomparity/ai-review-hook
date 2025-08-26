@@ -1,4 +1,4 @@
-name: Lint
+name: CI
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  pre-commit:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +17,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: pip install -r requirements-dev.txt
-      - name: Run pytest
-        run: pytest
+        run: make setup
+      - name: Run CI checks
+        run: make ci

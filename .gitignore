@@ -39,6 +39,8 @@ htmlcov/
 .nox/
 .coverage
 .coverage.*
+coverage.xml
+junit.xml
 .cache
 .pytest_cache/
 .hypothesis/

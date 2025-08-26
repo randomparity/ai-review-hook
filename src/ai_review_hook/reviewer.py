@@ -4,12 +4,12 @@ import random
 import re
 import subprocess
 import time
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import openai
+from openai.types.chat import ChatCompletionMessageParam
 
-from .utils import select_prompt_template, redact, get_file_extension
+from .utils import get_file_extension, redact, select_prompt_template
 
 # Constants
 DEFAULT_MODEL = "gpt-4o-mini"
@@ -148,12 +148,16 @@ class AIReviewer:
             prompt = custom_prompt.format(
                 filename=filename,
                 diff=diff,
-                content=content
-                if not diff_only and content and not content.startswith("[")
-                else "",
-                diff_only_note="Note: Only diff is provided for security (--diff-only mode)."
-                if diff_only
-                else "",
+                content=(
+                    content
+                    if not diff_only and content and not content.startswith("[")
+                    else ""
+                ),
+                diff_only_note=(
+                    "Note: Only diff is provided for security (--diff-only mode)."
+                    if diff_only
+                    else ""
+                ),
             )
 
             # Ensure custom prompts include the required response format instruction
@@ -285,7 +289,7 @@ Provide specific, actionable feedback with line numbers where possible. If no si
 
         lines = diff.split("\n")
         hunks = []
-        current_hunk = []
+        current_hunk: List[str] = []
         hunk_count = 0
 
         for line in lines:
@@ -357,14 +361,13 @@ Provide specific, actionable feedback with line numbers where possible. If no si
         # Cap at max delay
         base_delay = min(base_delay, self.max_retry_delay)
 
-        # Add jitter to prevent thundering herd
-        jitter = base_delay * self.retry_jitter * random.random()
+        return float(base_delay + (base_delay * self.retry_jitter * random.random()))
 
-        return base_delay + jitter
-
-    def _make_api_call_with_retry(self, messages: list, filename: str) -> str:
+    def _make_api_call_with_retry(
+        self, messages: List[ChatCompletionMessageParam], filename: str
+    ) -> str:
         """Make an API call with retry logic for rate limits and transient errors."""
-        last_error = None
+        last_error: Optional[Exception] = None
 
         for attempt in range(self.max_retries + 1):
             try:
@@ -419,10 +422,14 @@ Provide specific, actionable feedback with line numbers where possible. If no si
                 time.sleep(delay)
 
         # If we get here, all retries failed
-        raise last_error
+        if last_error is not None:
+            raise last_error
+        raise Exception("Unknown error in API call")
 
     @staticmethod
-    def _parse_review_text(review_text: str) -> Tuple[str, Optional[List[Dict]]]:
+    def _parse_review_text(
+        review_text: str,
+    ) -> Tuple[str, Optional[List[Dict[str, Any]]]]:
         """
         Parses the AI review text to separate the human-readable part and the JSON findings.
         """
@@ -438,8 +445,10 @@ Provide specific, actionable feedback with line numbers where possible. If no si
             try:
                 data = json.loads(json_str)
                 # Basic validation
-                if isinstance(data, dict) and "findings" in data and isinstance(
-                    data["findings"], list
+                if (
+                    isinstance(data, dict)
+                    and "findings" in data
+                    and isinstance(data["findings"], list)
                 ):
                     json_findings = data["findings"]
                     # Remove the JSON block from the human-readable text
@@ -455,7 +464,9 @@ Provide specific, actionable feedback with line numbers where possible. If no si
         """Determines pass/fail from review text."""
         # Fail-closed: FAIL takes precedence.
         # Check the first line for a definitive marker.
-        match = re.match(r"^AI-REVIEW:\[(PASS|FAIL)\]", review_text.strip(), re.IGNORECASE)
+        match = re.match(
+            r"^AI-REVIEW:\[(PASS|FAIL)\]", review_text.strip(), re.IGNORECASE
+        )
         if match:
             result = match.group(1).upper()
             return result == "PASS"
@@ -476,7 +487,7 @@ Provide specific, actionable feedback with line numbers where possible. If no si
         max_diff_bytes: int = 0,
         max_content_bytes: int = 0,
         diff_only: bool = False,
-    ) -> Tuple[bool, str, Optional[List[Dict]]]:
+    ) -> Tuple[bool, str, Optional[List[Dict[str, Any]]]]:
         """
         Review a single file using AI.
 
@@ -529,7 +540,7 @@ Provide specific, actionable feedback with line numbers where possible. If no si
 
         try:
             # Use retry mechanism for API calls
-            messages = [
+            messages: List[ChatCompletionMessageParam] = [
                 {
                     "role": "system",
                     "content": "You are an expert code reviewer. Provide thorough, constructive feedback on code changes.",
