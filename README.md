@@ -92,6 +92,7 @@ The result is [AI Hook Review](https://github.com/randomparity/ai-review-hook), 
 *   `--format`: Output format: `text` (default), `json`, or `codeclimate`. `codeclimate` produces Code Climate-compatible JSON for GitLab/GitHub code-quality reports; `json` is machine-readable.
 *   `--include-files`: File patterns to include for review (e.g., '*.py' or '*.py,*.js'). Can be specified multiple times. If not specified, all files are included by default.
 *   `--exclude-files`: File patterns to exclude from review (e.g., '*.test.py' or '*.test.*,*.spec.*'). Can be specified multiple times. Exclude patterns take precedence over include patterns.
+*   `--no-default-excludes`: Disable the default exclude patterns for common non-reviewable files (e.g., lockfiles, vendored dependencies, minified assets).
 *   `--filetype-prompts`: Path to JSON file containing filetype-specific prompts. File should map glob patterns to custom prompt templates (e.g., `{"*.py": "Review this Python code...", "*.md": "Review this documentation...", "test_*.py": "Review this test file...", "src/**/*.js": "Review this JavaScript source..."}`)
 *   `-v`, `--verbose`: Enable verbose logging
 
@@ -189,6 +190,20 @@ The AI Review Hook supports filtering files by type to optimize review focus and
 *   **Pattern Syntax**: Supports standard glob patterns (`*.py`, `src/*.js`, `**/*.test.*`)
 *   **Multiple Patterns**: Can specify multiple patterns using comma separation or multiple flags
 *   **Precedence**: Exclude patterns take precedence over include patterns
+
+### Default Excludes
+By default, `ai-review-hook` excludes a list of common files that are generally not useful to review. This helps reduce noise and API costs.
+
+The following patterns are excluded by default:
+- **Lockfiles**: `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `composer.lock`, `Gemfile.lock`, `poetry.lock`, `Pipfile.lock`
+- **Vendored Dependencies**: `vendor/**`, `node_modules/**`
+- **Minified Assets**: `*.min.js`, `*.min.css`
+- **Image Files**: `*.png`, `*.jpg`, `*.jpeg`, `*.gif`, `*.svg`, `*.ico`, `*.webp`
+- **Build Artifacts & Logs**: `dist/**`, `build/**`, `*.log`, `*.tmp`, `*.swp`, `coverage.xml`
+- **Compiled Python**: `*.pyc`, `__pycache__/**`
+- **Data & Font Files**: `*.csv`, `*.json`, `*.xml`, `*.woff`, `*.woff2`, `*.ttf`, `*.eot`
+
+To disable this behavior and review all files (respecting only the `--include-files` and `--exclude-files` arguments), use the `--no-default-excludes` flag.
 
 ### Usage Examples
 

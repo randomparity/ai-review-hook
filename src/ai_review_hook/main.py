@@ -20,6 +20,7 @@ from .utils import (
     parse_file_patterns,
     load_filetype_prompts,
     redact,
+    DEFAULT_EXCLUDE_PATTERNS,
 )
 
 
@@ -137,6 +138,11 @@ def main() -> int:
         help="File patterns to exclude from review (e.g., '*.test.py' or '*.test.*,*.spec.*'). Can be specified multiple times. Exclude patterns take precedence over include patterns.",
     )
     parser.add_argument(
+        "--no-default-excludes",
+        action="store_true",
+        help="Disable the default exclude patterns for common non-reviewable files (e.g., lockfiles, vendored dependencies, minified assets).",
+    )
+    parser.add_argument(
         "--filetype-prompts",
         help='Path to JSON file containing glob pattern-specific prompts. File should map glob patterns to custom prompt templates (e.g., {"*.py": "Review this Python code...", "tests/**/*.py": "Review this test file...", "src/core/*.py": "Review this core module..."}). Supports exact filenames, extensions, and glob patterns.',
     )
@@ -185,7 +191,13 @@ def main() -> int:
 
     # Parse file filtering patterns
     include_patterns = parse_file_patterns(args.include_files or [])
-    exclude_patterns = parse_file_patterns(args.exclude_files or [])
+    user_exclude_patterns = parse_file_patterns(args.exclude_files or [])
+
+    # Combine default and user-specified exclude patterns
+    if not args.no_default_excludes:
+        exclude_patterns = DEFAULT_EXCLUDE_PATTERNS + user_exclude_patterns
+    else:
+        exclude_patterns = user_exclude_patterns
 
     # Filter files based on include/exclude patterns
     original_file_count = len(args.files)

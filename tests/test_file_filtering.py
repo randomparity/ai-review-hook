@@ -4,7 +4,11 @@ Unit tests for file type filtering functionality in AI Review Hook.
 """
 
 import pytest
-from src.ai_review_hook.utils import should_review_file, parse_file_patterns
+from src.ai_review_hook.utils import (
+    should_review_file,
+    parse_file_patterns,
+    DEFAULT_EXCLUDE_PATTERNS,
+)
 
 
 class TestFileFiltering:
@@ -282,6 +286,72 @@ class TestFileFilteringIntegration:
         ]
 
         assert set(actual_included) == set(expected_included)
+
+
+class TestDefaultExcludes:
+    """Test cases for default file exclusion functionality."""
+
+    def test_default_excludes_are_applied(self):
+        """Test that default exclude patterns are applied correctly."""
+        # These files should be excluded by default
+        assert not should_review_file("package-lock.json", [], DEFAULT_EXCLUDE_PATTERNS)
+        assert not should_review_file("vendor/lib/foo.js", [], DEFAULT_EXCLUDE_PATTERNS)
+        assert not should_review_file("assets/app.min.css", [], DEFAULT_EXCLUDE_PATTERNS)
+        assert not should_review_file("logo.png", [], DEFAULT_EXCLUDE_PATTERNS)
+        assert not should_review_file("dist/bundle.js", [], DEFAULT_EXCLUDE_PATTERNS)
+        assert not should_review_file("main.pyc", [], DEFAULT_EXCLUDE_PATTERNS)
+        assert not should_review_file("__pycache__/settings.pyc", [], DEFAULT_EXCLUDE_PATTERNS)
+
+        # A regular file should still be included
+        assert should_review_file("src/main.py", [], DEFAULT_EXCLUDE_PATTERNS)
+
+    def test_no_default_excludes_flag_works(self):
+        """Test that --no-default-excludes flag disables default excludes."""
+        # With an empty exclude list, these files should now be included
+        assert should_review_file("package-lock.json", [], [])
+        assert should_review_file("vendor/lib/foo.js", [], [])
+        assert should_review_file("assets/app.min.css", [], [])
+
+    def test_user_excludes_are_combined_with_defaults(self):
+        """Test that user-specified excludes are added to the default list."""
+        user_excludes = ["*.log", "config.json"]
+        combined_excludes = DEFAULT_EXCLUDE_PATTERNS + user_excludes
+
+        # Default excluded file
+        assert not should_review_file("yarn.lock", [], combined_excludes)
+        # User excluded files
+        assert not should_review_file("error.log", [], combined_excludes)
+        assert not should_review_file("config.json", [], combined_excludes)
+        # Regular file
+        assert should_review_file("src/main.py", [], combined_excludes)
+
+    def test_user_excludes_work_with_no_default_excludes(self):
+        """Test that user excludes still work when default excludes are disabled."""
+        user_excludes = ["*.log", "config.json"]
+
+        # User excluded files
+        assert not should_review_file("error.log", [], user_excludes)
+        assert not should_review_file("config.json", [], user_excludes)
+        # A file that would have been excluded by default should now be included
+        assert should_review_file("yarn.lock", [], user_excludes)
+        # Regular file
+        assert should_review_file("src/main.py", [], user_excludes)
+
+    def test_include_patterns_still_work_with_default_excludes(self):
+        """Test that include patterns are still respected with default excludes."""
+        include_patterns = ["*.js"]
+        # `app.min.js` matches the include pattern, but should be excluded by default
+        assert not should_review_file(
+            "app.min.js", include_patterns, DEFAULT_EXCLUDE_PATTERNS
+        )
+        # `main.js` should be included
+        assert should_review_file(
+            "main.js", include_patterns, DEFAULT_EXCLUDE_PATTERNS
+        )
+        # `main.py` does not match include pattern
+        assert not should_review_file(
+            "main.py", include_patterns, DEFAULT_EXCLUDE_PATTERNS
+        )
 
 
 if __name__ == "__main__":

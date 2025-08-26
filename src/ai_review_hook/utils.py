@@ -5,6 +5,52 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
+# Default exclude patterns for common non-reviewable files
+DEFAULT_EXCLUDE_PATTERNS = [
+    # Lockfiles
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "composer.lock",
+    "Gemfile.lock",
+    "poetry.lock",
+    "Pipfile.lock",
+    # Vendored dependencies
+    "vendor/**",
+    "node_modules/**",
+    # Minified assets
+    "*.min.js",
+    "*.min.css",
+    # Image files
+    "*.png",
+    "*.jpg",
+    "*.jpeg",
+    "*.gif",
+    "*.svg",
+    "*.ico",
+    "*.webp",
+    # Build artifacts and logs
+    "dist/**",
+    "build/**",
+    "*.log",
+    "*.tmp",
+    "*.swp",
+    "coverage.xml",
+    # Compiled Python files
+    "*.pyc",
+    "__pycache__/**",
+    # Data files
+    "*.csv",
+    "*.json",
+    "*.xml",
+    # Font files
+    "*.woff",
+    "*.woff2",
+    "*.ttf",
+    "*.eot",
+]
+
+
 # Secret detection patterns
 SECRET_PATTERNS = [
     # AWS credentials
