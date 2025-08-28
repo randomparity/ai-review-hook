@@ -89,6 +89,10 @@ Key options to know (see README for full list)
 CI
 - GitHub Actions runs `make ci` on Python 3.12. Prefer the same Makefile targets locally before commit/push.
 
+Prohibited commands
+- Never run: git push --no-verify (do not bypass pre-commit or CI gates)
+- Never run: git commit --no-verify (do not bypass pre-commit or CI gates)
+
 Notes from README
 - Quick Start and usage examples for consumers are in README.md, including how to add this hook to a project, configure models/base URLs, filter files, enable parallelism, and use filetype-specific prompts with glob patterns.
 - Development setup in this repo: pip install -r requirements-dev.txt and pre-commit install.

@@ -9,14 +9,28 @@ on:
       - main
 
 jobs:
-  ci:
+  dev-ci:
+    name: Dev CI (Python 3.12)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install dependencies
+      - name: Set up venv and install
         run: make setup
-      - name: Run CI checks
+      - name: Run full CI suite
         run: make ci
+
+  runtime-compat:
+    name: Runtime compatibility (Python 3.7 install/import)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.7'
+      - name: Install package (runtime deps only)
+        run: pip install .
+      - name: Import smoke test
+        run: python -c "import ai_review_hook; print(ai_review_hook.__version__)"

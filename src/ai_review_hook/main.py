@@ -15,7 +15,12 @@ import sys
 from typing import Dict, List, Optional, Tuple, Any
 
 from .reviewer import AIReviewer, DEFAULT_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
-from .formatters import format_as_text, format_as_json, format_as_codeclimate, format_as_jsonl
+from .formatters import (
+    format_as_text,
+    format_as_json,
+    format_as_codeclimate,
+    format_as_jsonl,
+)
 from .utils import (
     should_review_file,
     parse_file_patterns,

@@ -69,6 +69,10 @@ lint: ## Run ruff linting
 	$(REQUIRE_VENV)
 	$(RUFF) check $(SRC)/ $(TESTS)/
 
+lint-fix: ## Auto-fix lint issues with ruff
+	$(REQUIRE_VENV)
+	$(RUFF) check --fix $(SRC)/ $(TESTS)/
+
 format: ## Run black formatting
 	$(REQUIRE_VENV)
 	$(BLACK) $(SRC)/ $(TESTS)/
