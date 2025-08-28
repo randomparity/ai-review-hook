@@ -60,3 +60,18 @@ def format_as_codeclimate(
             codeclimate_issues.append(issue)
 
     return json.dumps(codeclimate_issues, indent=2)
+
+
+def format_as_jsonl(
+    all_reviews: List[Tuple[str, bool, str, Optional[List[Dict[str, Any]]]]],
+) -> str:
+    """Formats the review results as JSON Lines (one object per file)."""
+    lines = []
+    for filename, passed, _, findings in all_reviews:
+        record = {
+            "filename": filename,
+            "passed": passed,
+            "findings": findings if findings else [],
+        }
+        lines.append(json.dumps(record, ensure_ascii=False))
+    return "\n".join(lines)

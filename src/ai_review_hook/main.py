@@ -14,7 +14,7 @@ import sys
 from typing import Dict, List, Optional, Tuple, Any
 
 from .reviewer import AIReviewer, DEFAULT_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
-from .formatters import format_as_text, format_as_json, format_as_codeclimate
+from .formatters import format_as_text, format_as_json, format_as_codeclimate, format_as_jsonl
 from .utils import (
     should_review_file,
     parse_file_patterns,
@@ -99,9 +99,14 @@ def main() -> int:
     )
     parser.add_argument(
         "--format",
-        choices=["text", "codeclimate", "json"],
+        choices=["text", "codeclimate", "json", "jsonl"],
         default="text",
         help="Output format. 'text' is human-readable, 'codeclimate' is for GitLab/GitHub integration.",
+    )
+    parser.add_argument(
+        "--embed-json-in-log",
+        action="store_true",
+        help="When writing text logs, also embed a per-file JSON object between sentinels.",
     )
     parser.add_argument(
         "--max-retries",
@@ -304,6 +309,17 @@ File: {filename}
 
 """
             review_log_entry += review
+            if args.embed_json_in_log:
+                per_file_json = {
+                    "filename": filename,
+                    "passed": passed,
+                    "findings": findings if findings else [],
+                }
+                review_log_entry += (
+                    "\n=== AI_REVIEW_JSON_START ===\n"
+                    + json.dumps(per_file_json, ensure_ascii=False)
+                    + "\n=== AI_REVIEW_JSON_END ===\n"
+                )
             all_reviews.append((filename, passed, review_log_entry, findings))
     else:
         # Parallel processing
@@ -364,6 +380,17 @@ File: {filename}
 
 """
                 review_log_entry += review
+                if args.embed_json_in_log:
+                    per_file_json = {
+                        "filename": filename,
+                        "passed": passed,
+                        "findings": findings if findings else [],
+                    }
+                    review_log_entry += (
+                        "\n=== AI_REVIEW_JSON_START ===\n"
+                        + json.dumps(per_file_json, ensure_ascii=False)
+                        + "\n=== AI_REVIEW_JSON_END ===\n"
+                    )
                 all_reviews.append((filename, passed, review_log_entry, findings))
 
     # Generate output based on format
@@ -373,6 +400,8 @@ File: {filename}
         output_content = format_as_json(all_reviews)
     elif args.format == "codeclimate":
         output_content = format_as_codeclimate(all_reviews)
+    elif args.format == "jsonl":
+        output_content = format_as_jsonl(all_reviews)
     else:
         # Should not happen due to argparse choices
         logging.error(f"Unknown format: {args.format}")
