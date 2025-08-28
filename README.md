@@ -13,7 +13,7 @@ The result is [AI Hook Review](https://github.com/randomparity/ai-review-hook), 
     ```yaml
     repos:
     -   repo: https://github.com/randomparity/ai-review-hook
-        rev: v0.2.0  # Replace with the desired tag or commit SHA
+        rev: v0.2.3
         hooks:
         -   id: ai-review
     ```
@@ -22,7 +22,7 @@ The result is [AI Hook Review](https://github.com/randomparity/ai-review-hook), 
 
     ```yaml
     - repo: https://github.com/randomparity/ai-review-hook
-      rev: v0.2.0
+      rev: v0.2.3
       hooks:
         - id: ai-review
           name: AI Code Review
@@ -34,7 +34,9 @@ The result is [AI Hook Review](https://github.com/randomparity/ai-review-hook), 
             - "--context-lines"
             - "5"
             - "--output-file"
-            - "ai-review.log"
+            - "ai-review.jsonl"
+            - "--format"
+            - "jsonl"
             - "--allow-unsafe-base-url"
             - "--base-url"
             - "https://openrouter.ai/api/v1"
@@ -89,11 +91,12 @@ The result is [AI Hook Review](https://github.com/randomparity/ai-review-hook), 
 *   `--jobs`, `-j`: Number of parallel jobs for reviewing multiple files (default: 1)
 *   `--allow-unsafe-base-url`: Allow custom base URLs other than official OpenAI endpoints
 *   `--output-file`: File to save the complete review output
-*   `--format`: Output format: `text` (default), `json`, or `codeclimate`. `codeclimate` produces Code Climate-compatible JSON for GitLab/GitHub code-quality reports; `json` is machine-readable.
+*   `--format`: Output format: `text` (default), `json`, `jsonl`, or `codeclimate`. `codeclimate` produces Code Climate-compatible JSON for GitLab/GitHub code-quality reports; `json`/`jsonl` are machine-readable.
 *   `--include-files`: File patterns to include for review (e.g., '*.py' or '*.py,*.js'). Can be specified multiple times. If not specified, all files are included by default.
 *   `--exclude-files`: File patterns to exclude from review (e.g., '*.test.py' or '*.test.*,*.spec.*'). Can be specified multiple times. Exclude patterns take precedence over include patterns.
 *   `--no-default-excludes`: Disable the default exclude patterns for common non-reviewable files (e.g., lockfiles, vendored dependencies, minified assets).
 *   `--filetype-prompts`: Path to JSON file containing filetype-specific prompts. File should map glob patterns to custom prompt templates (e.g., `{"*.py": "Review this Python code...", "*.md": "Review this documentation...", "test_*.py": "Review this test file...", "src/**/*.js": "Review this JavaScript source..."}`)
+*   `--embed-json-in-log`: When using `--format text`, also embed a per-file JSON block between `=== AI_REVIEW_JSON_START ===` and `=== AI_REVIEW_JSON_END ===`.
 *   `-v`, `--verbose`: Enable verbose logging
 
 
@@ -101,6 +104,7 @@ The result is [AI Hook Review](https://github.com/randomparity/ai-review-hook), 
 
 - text (default): human-readable review summary suitable for local runs.
 - json: machine-readable array for scripting or tooling.
+- jsonl: machine-readable one-JSON-object-per-line; ideal for agents to stream/parse.
 - codeclimate: Code Climate-compatible JSON for GitHub/GitLab code-quality reports.
 
 Examples:
@@ -109,13 +113,16 @@ Examples:
 # Save JSON output to a file
 pre-commit run ai-review --all-files -- --format json --output-file ai-review.json
 
+# Save JSONL output to a file (agent-friendly)
+pre-commit run ai-review --all-files -- --format jsonl --output-file ai-review.jsonl
+
 # Generate a Code Climate report for CI
 pre-commit run ai-review --all-files -- --format codeclimate --output-file gl-code-quality-report.json
 
 # Example .pre-commit-config.yaml
 ```yaml
 - repo: https://github.com/randomparity/ai-review-hook
-  rev: v0.2.0
+  rev: v0.2.3
   hooks:
     - id: ai-review
       name: AI Code Review (Code Quality)
@@ -126,6 +133,16 @@ pre-commit run ai-review --all-files -- --format codeclimate --output-file gl-co
         - "gl-code-quality-report.json"
 ```
 
+### Embedded JSON in text logs (optional)
+
+Append a compact per-file JSON object into the text log, bracketed by sentinels:
+
+```bash
+pre-commit run ai-review --all-files -- \
+  --format text \
+  --output-file ai-review.log \
+  --embed-json-in-log
+```
 
 ## Security Features
 
@@ -244,7 +261,7 @@ pre-commit run ai-review --all-files -- \
 **Configuration in .pre-commit-config.yaml:**
 ```yaml
 - repo: https://github.com/randomparity/ai-review-hook
-  rev: v1.0.0
+  rev: v0.2.3
   hooks:
     - id: ai-review
       name: AI Code Review - Python Only
@@ -372,7 +389,7 @@ pre-commit run ai-review --all-files -- \
 **Pre-commit Configuration:**
 ```yaml
 - repo: https://github.com/randomparity/ai-review-hook
-  rev: v1.0.0
+  rev: v0.2.3
   hooks:
     - id: ai-review
       name: AI Code Review with Custom Prompts
