@@ -8,6 +8,7 @@ using the OpenAI API with configurable models and endpoints.
 
 import argparse
 import concurrent.futures
+import json
 import logging
 import os
 import sys

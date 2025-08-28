@@ -15,25 +15,30 @@ Environment setup
 - Optional (recommended for local CLI testing): install the package in editable mode:
   - pip install -e .
 
-Linting and formatting
-- Run ruff checks (matches pre-commit config):
-  - ruff check src tests
-- Autofix issues:
-  - ruff check --fix src tests
+Build, linting, tests (Makefile)
+- One-time setup (creates .venv, installs dev deps):
+  - make setup
+- Lint:
+  - make lint
 - Format code:
-  - ruff format
-- Run all pre-commit hooks locally (ruff + pytest hook):
+  - make format
+- Typecheck and security scan:
+  - make typecheck
+  - make security
+- Run tests:
+  - make test
+- Full CI suite (what CI runs):
+  - make ci
+- Run all pre-commit hooks locally:
   - pre-commit run -a
 
-Tests
-- Run all tests:
-  - pytest
+Tests (single-file or single-test examples)
 - Run a specific test file:
-  - pytest tests/test_main.py -q
+  - .venv/bin/pytest tests/test_main.py -q
 - Run a single test:
-  - pytest tests/test_main.py::test_review_file_pass -q
+  - .venv/bin/pytest tests/test_main.py::test_review_file_pass -q
 - Filter by keyword expression:
-  - pytest -k "redact and not jwt"
+  - .venv/bin/pytest -k "redact and not jwt"
 
 CLI and hook usage (local development)
 - Ensure an API key env var is set (defaults to OPENAI_API_KEY):
@@ -82,7 +87,7 @@ Key options to know (see README for full list)
 - --context-lines: git diff context size
 
 CI
-- GitHub Actions job runs pytest using Python 3.12. Keep tests green locally with pytest before pushing.
+- GitHub Actions runs `make ci` on Python 3.12. Prefer the same Makefile targets locally before commit/push.
 
 Notes from README
 - Quick Start and usage examples for consumers are in README.md, including how to add this hook to a project, configure models/base URLs, filter files, enable parallelism, and use filetype-specific prompts with glob patterns.
