@@ -296,11 +296,15 @@ class TestDefaultExcludes:
         # These files should be excluded by default
         assert not should_review_file("package-lock.json", [], DEFAULT_EXCLUDE_PATTERNS)
         assert not should_review_file("vendor/lib/foo.js", [], DEFAULT_EXCLUDE_PATTERNS)
-        assert not should_review_file("assets/app.min.css", [], DEFAULT_EXCLUDE_PATTERNS)
+        assert not should_review_file(
+            "assets/app.min.css", [], DEFAULT_EXCLUDE_PATTERNS
+        )
         assert not should_review_file("logo.png", [], DEFAULT_EXCLUDE_PATTERNS)
         assert not should_review_file("dist/bundle.js", [], DEFAULT_EXCLUDE_PATTERNS)
         assert not should_review_file("main.pyc", [], DEFAULT_EXCLUDE_PATTERNS)
-        assert not should_review_file("__pycache__/settings.pyc", [], DEFAULT_EXCLUDE_PATTERNS)
+        assert not should_review_file(
+            "__pycache__/settings.pyc", [], DEFAULT_EXCLUDE_PATTERNS
+        )
 
         # A regular file should still be included
         assert should_review_file("src/main.py", [], DEFAULT_EXCLUDE_PATTERNS)
@@ -345,9 +349,7 @@ class TestDefaultExcludes:
             "app.min.js", include_patterns, DEFAULT_EXCLUDE_PATTERNS
         )
         # `main.js` should be included
-        assert should_review_file(
-            "main.js", include_patterns, DEFAULT_EXCLUDE_PATTERNS
-        )
+        assert should_review_file("main.js", include_patterns, DEFAULT_EXCLUDE_PATTERNS)
         # `main.py` does not match include pattern
         assert not should_review_file(
             "main.py", include_patterns, DEFAULT_EXCLUDE_PATTERNS
