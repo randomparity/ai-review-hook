@@ -2,7 +2,7 @@
 
 This project grew out of my frustration with existing AI coding frameworks. I would follow the general guidance to add best practices requirements to CLAUDE.md, WARP.md, or other framework specific system prompts, but the AI tends to forget about them over time and moves towards the quickest method to push code on its way out the door.
 
-After a few atttemtps to ***vibe code*** my way to success I quickly recognized the need to setup adequate guard rails to keep an AI headed in the right direction.  Git hooks work as an excellent gate and [pre-commit](https://github.com/pre-commit/pre-commit) was a flexible way to add custom controls.  
+After a few atttemtps to ***vibe code*** my way to success I quickly recognized the need to setup adequate guard rails to keep an AI headed in the right direction.  Git hooks work as an excellent gate and [pre-commit](https://github.com/pre-commit/pre-commit) was a flexible way to add custom controls.
 
 The result is [AI Hook Review](https://github.com/randomparity/ai-review-hook), a python application that uses `pre-commit` to setup `pre-commit`/`pre-push` git hooks and add the missing ***vibe coding*** guard rails.
 
