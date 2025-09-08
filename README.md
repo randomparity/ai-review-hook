@@ -426,7 +426,7 @@ pre-commit run ai-review --all-files -- \
 
 ## Development
 
-To set up a local development environment, you'll need Python 3.7+ and `make`. The `Makefile` provides several convenient targets for common development tasks.
+To set up a local development environment, you'll need Python 3.9+ and `make`. The `Makefile` provides several convenient targets for common development tasks.
 
 1.  **Set up the virtual environment and install dependencies:**
 
@@ -455,7 +455,7 @@ To set up a local development environment, you'll need Python 3.7+ and `make`. T
     make test
     ```
 
-    To run the tests against all supported Python versions (from 3.7 to 3.12), you'll need to have those Python versions installed on your system (e.g., via `pyenv`). Then, run:
+    To run the tests against all supported Python versions (from 3.9 to 3.13), you'll need to have those Python versions installed on your system (e.g., via `pyenv`). Then, run:
     ```bash
     make test-all-versions
     ```
