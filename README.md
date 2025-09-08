@@ -424,6 +424,57 @@ pre-commit run ai-review --all-files -- \
 
 > For development and build instructions, see BUILD.md and CONTRIBUTING.md.
 
+## Development
+
+To set up a local development environment, you'll need Python 3.7+ and `make`. The `Makefile` provides several convenient targets for common development tasks.
+
+1.  **Set up the virtual environment and install dependencies:**
+
+    ```bash
+    make setup
+    ```
+
+    This command will create a virtual environment in `.venv/` and install all the necessary dependencies. It will try to use `uv` or `pyenv` if they are installed, falling back to the system's `python3`. It will try to use the Python version specified in a local `.python-version` file, or a default version if the file is not present.
+
+2.  **Activate the virtual environment:**
+
+    On macOS and Linux:
+    ```bash
+    source .venv/bin/activate
+    ```
+
+    On Windows:
+    ```bash
+    .venv\Scripts\activate
+    ```
+
+3.  **Run the tests:**
+
+    To run the tests with the default Python version:
+    ```bash
+    make test
+    ```
+
+    To run the tests against all supported Python versions (from 3.7 to 3.12), you'll need to have those Python versions installed on your system (e.g., via `pyenv`). Then, run:
+    ```bash
+    make test-all-versions
+    ```
+    This uses `tox` to run the full test suite in isolated environments for each Python version.
+
+4.  **Run linters and formatters:**
+
+    ```bash
+    make lint
+    make format
+    make typecheck
+    ```
+
+5.  **Run all CI checks:**
+
+    ```bash
+    make ci
+    ```
+
 ## License
 
 MIT License
