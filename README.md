@@ -48,6 +48,18 @@ The result is [AI Hook Review](https://github.com/randomparity/ai-review-hook), 
     export OPENAI_API_KEY="your_api_key_here"
     ```
 
+    Alternatively, store your API key in a file and pass it with --api-key-file:
+
+    ```bash
+    mkdir -p ~/.config/ai-review-hook
+    # Write your key (do not commit this file)
+    printf "%s" "{{OPENAI_API_KEY}}" > ~/.config/ai-review-hook/api_key
+    chmod 600 ~/.config/ai-review-hook/api_key
+
+    # Example run using the file
+    pre-commit run ai-review --all-files -- --api-key-file ~/.config/ai-review-hook/api_key
+    ```
+
 3.  **Install and run the hooks**:
 
     ```bash
@@ -77,6 +89,7 @@ The result is [AI Hook Review](https://github.com/randomparity/ai-review-hook), 
 ## Command-Line Options
 
 *   `--api-key-env`: Environment variable for the OpenAI API key (default: `OPENAI_API_KEY`)
+*   `--api-key-file`: Path to a file containing the API key. If provided, it takes precedence over `--api-key-env`.
 *   `--base-url`: Custom API base URL for compatible APIs
 *   `--model`: OpenAI model to use (default: `gpt-4o-mini`)
 *   `--timeout`: API request timeout in seconds (default: 30)

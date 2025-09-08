@@ -37,6 +37,10 @@ def main() -> int:
         help="Environment variable containing the OpenAI API key (default: OPENAI_API_KEY)",
     )
     parser.add_argument(
+        "--api-key-file",
+        help="Path to a file containing the OpenAI API key. If provided, overrides --api-key-env.",
+    )
+    parser.add_argument(
         "--base-url",
         help="Custom API base URL (e.g., for Azure OpenAI or other compatible APIs)",
     )
@@ -177,13 +181,28 @@ def main() -> int:
                 logging.warning(
                     f"Using custom base URL: {args.base_url}. Code will be sent to this endpoint."
                 )
-    api_key = os.getenv(args.api_key_env)
-    if not api_key:
-        logging.error(f"API key not found in environment variable '{args.api_key_env}'")
-        logging.error(
-            f"Please set the environment variable: export {args.api_key_env}=your_api_key"
-        )
-        return 1
+    # Resolve API key: prefer --api-key-file if provided, otherwise use environment variable.
+    api_key = None
+    if getattr(args, "api_key_file", None):
+        try:
+            with open(args.api_key_file, "r", encoding="utf-8") as f:
+                api_key = f.read().strip()
+            if not api_key:
+                logging.error(f"API key file is empty: {args.api_key_file}")
+                return 1
+        except OSError as e:
+            logging.error(f"Failed to read API key from file {args.api_key_file}: {e}")
+            return 1
+    else:
+        api_key = os.getenv(args.api_key_env)
+        if not api_key:
+            logging.error(
+                f"API key not found in environment variable '{args.api_key_env}'"
+            )
+            logging.error(
+                f"Please set it or use --api-key-file. Example: export {args.api_key_env}={{API_KEY}}"
+            )
+            return 1
 
     if not args.files:
         logging.info("No files to review")
