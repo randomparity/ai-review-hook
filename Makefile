@@ -47,10 +47,43 @@ check-python: ## Validate host has a compatible Python and venv tooling
 	@echo '✅ Python toolchain looks OK.'
 
 setup: ## Create venv and install dev deps
-	@command -v python3 >/dev/null || { echo '❌ python3 not found'; exit 1; }
-	@[ -d $(VENV) ] || python3 -m venv $(VENV)
-	$(PY) -m pip install -U pip
-	@if [ -f pyproject.toml ]; then 		$(PIP) install -e .[dev]; 	fi
+	@# Prefer uv, then pyenv, then system python for venv creation and deps
+	@if command -v uv >/dev/null 2>&1; then \
+
+		echo '🔧 Using uv to create venv and install dev dependencies'; \
+
+		[ -d $(VENV) ] || uv venv --python '$(REQUIRED_PYTHON_VERSION)' '$(VENV)' || uv venv '$(VENV)'; \
+
+		uv pip install -p '$(VENV)/bin/python' -U pip; \
+
+		if [ -f pyproject.toml ]; then uv pip install -p '$(VENV)/bin/python' -e '.[dev]'; fi; \
+
+	elif command -v pyenv >/dev/null 2>&1; then \
+
+		echo '🔧 Using pyenv to create venv and install dev dependencies'; \
+
+		pyenv install -s '$(REQUIRED_PYTHON_VERSION)'; \
+
+		[ -d $(VENV) ] || PYENV_VERSION='$(REQUIRED_PYTHON_VERSION)' pyenv exec python -m venv '$(VENV)'; \
+
+		'$(VENV)/bin/python' -m pip install -U pip; \
+
+		if [ -f pyproject.toml ]; then '$(VENV)/bin/pip' install -e '.[dev]'; fi; \
+
+	else \
+
+		echo '🔧 Using system python3 to create venv and install dev dependencies'; \
+
+		command -v python3 >/dev/null || { echo '❌ python3 not found'; exit 1; }; \
+
+		[ -d $(VENV) ] || python3 -m venv '$(VENV)'; \
+
+		'$(VENV)/bin/python' -m pip install -U pip; \
+
+		if [ -f pyproject.toml ]; then '$(VENV)/bin/pip' install -e '.[dev]'; fi; \
+
+	fi; \
+
 	@# Optional git hooks if pre-commit is installed in the venv
 	@$(PRECOMMIT) install --hook-type commit-msg --hook-type pre-push || true
 
