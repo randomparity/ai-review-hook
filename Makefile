@@ -1,4 +1,4 @@
-# Makefile for VidClean
+# Makefile for ai-review-hook
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 .ONESHELL:
@@ -6,14 +6,13 @@ SHELL := /bin/bash
 .PHONY: help check-python setup install clean clean-venv venv-info lint format typecheck security test ci
 
 # Required Python version from .python-version file
-REQUIRED_PYTHON_VERSION := $(shell cat .python-version 2>/dev/null || echo "3.12.11")
+REQUIRED_PYTHON_VERSION := $(shell cat .python-version 2>/dev/null || echo "3.12.1")
 REQUIRED_PYTHON_MAJOR := $(shell echo $(REQUIRED_PYTHON_VERSION) | cut -d. -f1,2)
 
 COV := 79
 SRC  := src
 TESTS := tests
 VENV := .venv
-REQ_FILE ?= requirements-dev.txt
 
 # Python & tools inside the venv
 PY         := $(VENV)/bin/python
@@ -117,6 +116,9 @@ security: ## Run bandit security scanning
 test: ## Run pytest with coverage gate
 	$(REQUIRE_VENV)
 	$(PYTEST) $(TESTS)/ -q --tb=short --cov=$(SRC) --cov-report=term-missing --cov-report=xml --cov-fail-under=$(COV) --junit-xml=junit.xml
+
+test-all-versions: ## Run tests against all supported Python versions using tox
+	tox
 
 ci: ## Run all CI checks (lint, format-check, typecheck, security, test)
 	$(REQUIRE_VENV)

@@ -9,14 +9,19 @@ on:
       - main
 
 jobs:
-  ci:
+  test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - name: Install dependencies
-        run: make setup
-      - name: Run CI checks
-        run: make ci
+          python-version: ${{ matrix.python-version }}
+      - name: Install tox
+        run: pip install tox
+      - name: Run tests
+        run: tox -e py${{ matrix.python-version }}
