@@ -22,7 +22,7 @@ The result is [AI Hook Review](https://github.com/randomparity/ai-review-hook), 
 
     ```yaml
     - repo: https://github.com/randomparity/ai-review-hook
-      rev: v0.2.0
+      rev: v0.2.3
       hooks:
         - id: ai-review
           name: AI Code Review
@@ -128,7 +128,7 @@ pre-commit run ai-review --all-files -- --format codeclimate --output-file gl-co
 # Example .pre-commit-config.yaml
 ```yaml
 - repo: https://github.com/randomparity/ai-review-hook
-  rev: v0.2.0
+  rev: v0.2.3
   hooks:
     - id: ai-review
       name: AI Code Review (Code Quality)
@@ -257,7 +257,7 @@ pre-commit run ai-review --all-files -- \
 **Configuration in .pre-commit-config.yaml:**
 ```yaml
 - repo: https://github.com/randomparity/ai-review-hook
-  rev: v1.0.0
+  rev: v0.2.3
   hooks:
     - id: ai-review
       name: AI Code Review - Python Only
@@ -385,7 +385,7 @@ pre-commit run ai-review --all-files -- \
 **Pre-commit Configuration:**
 ```yaml
 - repo: https://github.com/randomparity/ai-review-hook
-  rev: v1.0.0
+  rev: v0.2.3
   hooks:
     - id: ai-review
       name: AI Code Review with Custom Prompts
