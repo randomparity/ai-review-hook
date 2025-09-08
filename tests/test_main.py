@@ -125,6 +125,7 @@ def test_main_format_json(mock_reviewer_class, mock_formatter):
                 mock_formatter.assert_called_once()
                 mock_print.assert_called_with("[]")
 
+
 @patch("src.ai_review_hook.main.format_as_codeclimate")
 @patch("src.ai_review_hook.main.AIReviewer")
 def test_main_format_codeclimate(mock_reviewer_class, mock_formatter):
@@ -147,6 +148,7 @@ def test_main_format_codeclimate(mock_reviewer_class, mock_formatter):
                 main()
                 mock_formatter.assert_called_once()
                 mock_print.assert_called_with("[]")
+
 
 @patch("src.ai_review_hook.main.format_as_text")
 @patch("src.ai_review_hook.main.AIReviewer")
@@ -185,7 +187,9 @@ def test_main_no_api_key(mock_log_error):
             assert result == 1
             # Should log an error message
             assert mock_log_error.call_count == 2
-            mock_log_error.assert_any_call("API key not found in environment variable 'OPENAI_API_KEY'")
+            mock_log_error.assert_any_call(
+                "API key not found in environment variable 'OPENAI_API_KEY'"
+            )
 
 
 @patch("src.ai_review_hook.main.AIReviewer")
@@ -224,6 +228,7 @@ def test_main_unreadable_file(mock_log_error, mock_reviewer_class):
 
     # Mock AIReviewer to raise an error for one file
     mock_reviewer = MagicMock()
+
     def mock_review_file(filename, *args, **kwargs):
         if filename == "unreadable.py":
             raise IOError("Permission denied")
@@ -241,7 +246,10 @@ def test_main_unreadable_file(mock_log_error, mock_reviewer_class):
             assert result == 1
             # Should have logged an error for the unreadable file
             mock_log_error.assert_called_once()
-            assert "Review of unreadable.py generated an exception: Permission denied" in mock_log_error.call_args[0][0]
+            assert (
+                "Review of unreadable.py generated an exception: Permission denied"
+                in mock_log_error.call_args[0][0]
+            )
             # Should have attempted to review both files
             assert mock_reviewer.review_file.call_count == 2
 
@@ -334,6 +342,7 @@ def test_main_end_to_end_scenario(mock_reviewer_class, tmp_path):
 
     # 2. Mock AIReviewer
     mock_reviewer = MagicMock()
+
     def mock_review_file(filename, *args, **kwargs):
         if filename == "failing.py":
             return (False, "AI-REVIEW:[FAIL]", [])
@@ -368,5 +377,7 @@ def test_main_end_to_end_scenario(mock_reviewer_class, tmp_path):
                 assert mock_reviewer.review_file.call_count == 2
 
                 # 4. Final summary should be logged as a warning
-                log_calls = " ".join([call[0][0] for call in mock_log_warning.call_args_list])
+                log_calls = " ".join(
+                    [call[0][0] for call in mock_log_warning.call_args_list]
+                )
                 assert "AI REVIEW FAILED" in log_calls

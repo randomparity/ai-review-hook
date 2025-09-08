@@ -1,5 +1,9 @@
 import json
-from src.ai_review_hook.formatters import format_as_text, format_as_json, format_as_codeclimate
+from src.ai_review_hook.formatters import (
+    format_as_text,
+    format_as_json,
+    format_as_codeclimate,
+)
 
 
 def test_format_as_text():
@@ -9,7 +13,14 @@ def test_format_as_text():
             "file1.py",
             False,
             "AI-REVIEW:[FAIL]\\nReview for file1",
-            [{"line": 1, "message": "finding 1", "severity": "major", "check_name": "check1"}],
+            [
+                {
+                    "line": 1,
+                    "message": "finding 1",
+                    "severity": "major",
+                    "check_name": "check1",
+                }
+            ],
         ),
         (
             "file2.py",
@@ -22,6 +33,7 @@ def test_format_as_text():
     assert "Review for file1" in output
     assert "Review for file2" in output
 
+
 def test_format_as_json():
     """Test JSON formatting."""
     mock_reviews = [
@@ -29,7 +41,14 @@ def test_format_as_json():
             "file1.py",
             False,
             "AI-REVIEW:[FAIL]\\nReview for file1",
-            [{"line": 1, "message": "finding 1", "severity": "major", "check_name": "check1"}],
+            [
+                {
+                    "line": 1,
+                    "message": "finding 1",
+                    "severity": "major",
+                    "check_name": "check1",
+                }
+            ],
         ),
         (
             "file2.py",
@@ -48,6 +67,7 @@ def test_format_as_json():
     assert data[1]["passed"] is True
     assert len(data[1]["findings"]) == 0
 
+
 def test_format_as_codeclimate():
     """Test CodeClimate formatting."""
     mock_reviews = [
@@ -55,7 +75,14 @@ def test_format_as_codeclimate():
             "file1.py",
             False,
             "AI-REVIEW:[FAIL]\\nReview for file1",
-            [{"line": 1, "message": "finding 1", "severity": "major", "check_name": "check1"}],
+            [
+                {
+                    "line": 1,
+                    "message": "finding 1",
+                    "severity": "major",
+                    "check_name": "check1",
+                }
+            ],
         ),
         (
             "file2.py",
@@ -67,7 +94,14 @@ def test_format_as_codeclimate():
             "file3.py",
             False,
             "AI-REVIEW:[FAIL]\\nReview for file3",
-            [{"line": None, "message": "general finding", "severity": "minor", "check_name": "check2"}],
+            [
+                {
+                    "line": None,
+                    "message": "general finding",
+                    "severity": "minor",
+                    "check_name": "check2",
+                }
+            ],
         ),
     ]
     output = format_as_codeclimate(mock_reviews)

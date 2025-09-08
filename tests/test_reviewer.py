@@ -13,7 +13,9 @@ def test_review_file_pass(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
+        passed, review, findings = reviewer.review_file(
+            "test.py", diff="- some changes"
+        )
         assert passed is True
         assert "AI-REVIEW:[PASS]" in review
         assert findings is None
@@ -29,7 +31,9 @@ def test_review_file_fail(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
+        passed, review, findings = reviewer.review_file(
+            "test.py", diff="- some changes"
+        )
         assert passed is False
         assert "AI-REVIEW:[FAIL]" in review
         assert findings is None
@@ -45,7 +49,9 @@ def test_review_file_empty_response(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
+        passed, review, findings = reviewer.review_file(
+            "test.py", diff="- some changes"
+        )
         assert passed is False
         assert "Empty message content from API" in review
         assert findings is None
@@ -61,7 +67,9 @@ def test_review_file_blank_response(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
+        passed, review, findings = reviewer.review_file(
+            "test.py", diff="- some changes"
+        )
         assert passed is False
         assert "Empty or blank response from AI model" in review
         assert findings is None
@@ -84,7 +92,9 @@ def test_review_file_api_error(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
+        passed, review, findings = reviewer.review_file(
+            "test.py", diff="- some changes"
+        )
         assert passed is False
         assert "OpenAI API Error" in review
         assert "429" in review
@@ -101,7 +111,9 @@ def test_review_file_generic_error(mock_openai):
 
     reviewer = AIReviewer(api_key="test_key")
     with patch.object(reviewer, "get_file_diff", return_value="- some changes"):
-        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
+        passed, review, findings = reviewer.review_file(
+            "test.py", diff="- some changes"
+        )
         assert passed is False
         assert "Unexpected error during AI review" in review
         assert "Something went wrong" in review
@@ -537,9 +549,9 @@ def test_review_file_with_retry_integration(mock_openai):
     mock_client = mock_openai.return_value
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
-    mock_response.choices[
-        0
-    ].message.content = "AI-REVIEW:[PASS]\nLooks good after retry!"
+    mock_response.choices[0].message.content = (
+        "AI-REVIEW:[PASS]\nLooks good after retry!"
+    )
 
     # Create test exception class
     class TestRateLimitError(openai.RateLimitError):
@@ -550,7 +562,9 @@ def test_review_file_with_retry_integration(mock_openai):
     mock_client.chat.completions.create.side_effect = [rate_limit_error, mock_response]
 
     with patch("src.ai_review_hook.reviewer.time.sleep"):
-        passed, review, findings = reviewer.review_file("test.py", diff="- some changes")
+        passed, review, findings = reviewer.review_file(
+            "test.py", diff="- some changes"
+        )
 
     # Should succeed after retry
     assert passed is True
@@ -652,7 +666,9 @@ def test_create_review_prompt_with_custom_prompt():
     prompts = {"*.py": "Review this Python file: {filename}"}
     reviewer = AIReviewer(api_key="test_key", filetype_prompts=prompts)
 
-    prompt = reviewer.create_review_prompt("test.py", "some content", "some diff", False)
+    prompt = reviewer.create_review_prompt(
+        "test.py", "some content", "some diff", False
+    )
 
     assert "Review this Python file: test.py" in prompt
     # The default prompt content should not be present
@@ -693,6 +709,7 @@ def test_get_file_content_unreadable():
 def test_get_file_diff_git_error():
     """Test that get_file_diff handles git errors."""
     import subprocess
+
     reviewer = AIReviewer(api_key="test_key")
     with patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "git")):
         diff = reviewer.get_file_diff("test.py")
